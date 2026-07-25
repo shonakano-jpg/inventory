@@ -95,6 +95,19 @@
       const key = (location || "店内在庫") + "|" + sku;
       if (all[sessionId]) { delete all[sessionId][key]; writeJSON(LS.scans, all); emit(); }
     },
+    // qtyをdelta分だけ増減。0以下になったら行ごと削除。読取後のqty(削除なら0)を返す。
+    async adjustScan(sessionId, sku, location, delta) {
+      const all = readJSON(LS.scans, {});
+      const key = (location || "店内在庫") + "|" + sku;
+      const bag = all[sessionId]; if (!bag || !bag[key]) return { qty: 0, removed: true };
+      const rec = bag[key];
+      rec.qty += parseInt(delta, 10) || 0;
+      rec.last_at = now();
+      let removed = false;
+      if (rec.qty <= 0) { delete bag[key]; removed = true; }
+      writeJSON(LS.scans, all); emit();
+      return { qty: removed ? 0 : rec.qty, removed };
+    },
     async getStores() {
       return readJSON(LS.stores, []).slice().sort((a, b) => (a.brand || "").localeCompare(b.brand || "", "ja") || (a.name || "").localeCompare(b.name || "", "ja"));
     },
@@ -180,6 +193,21 @@
     async removeScan(sessionId, sku, location) {
       const { error } = await sb.from("scans").delete().eq("session_id", sessionId).eq("sku", sku).eq("location", location || "店内在庫");
       if (error) throw error;
+    },
+    async adjustScan(sessionId, sku, location, delta) {
+      const loc = location || "店内在庫";
+      const { data, error } = await sb.from("scans").select("qty").eq("session_id", sessionId).eq("sku", sku).eq("location", loc).maybeSingle();
+      if (error) throw error;
+      if (!data) return { qty: 0, removed: true };
+      const newQty = (data.qty || 0) + (parseInt(delta, 10) || 0);
+      if (newQty > 0) {
+        const { error: e2 } = await sb.from("scans").update({ qty: newQty, last_at: now() }).eq("session_id", sessionId).eq("sku", sku).eq("location", loc);
+        if (e2) throw e2;
+        return { qty: newQty, removed: false };
+      }
+      const { error: e3 } = await sb.from("scans").delete().eq("session_id", sessionId).eq("sku", sku).eq("location", loc);
+      if (e3) throw e3;
+      return { qty: 0, removed: true };
     },
     async getStores() {
       const { data, error } = await sb.from("stores").select("*").order("brand").order("name");
@@ -282,6 +310,7 @@
     getAllScans() { return this.impl.getAllScans(); },
     addScan(sid, sku, dev, loc, qty) { return this.impl.addScan(sid, sku, dev, loc, qty); },
     removeScan(sid, sku, loc) { return this.impl.removeScan(sid, sku, loc); },
+    adjustScan(sid, sku, loc, delta) { return this.impl.adjustScan(sid, sku, loc, delta); },
 
     // 店舗マスタ
     getStores() { return this.impl.getStores(); },

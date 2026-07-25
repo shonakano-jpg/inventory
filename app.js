@@ -162,7 +162,9 @@
       return `<li class="row" data-sku="${esc(sc.sku)}" data-loc="${esc(sc.location)}">
         <div class="row-main"><div class="row-name">${name} ${pill}</div>
         <div class="row-sub"><span class="loc-tag">${esc(sc.location)}</span> ${esc(sc.sku)}${sc.device ? " · " + esc(sc.device) : ""}</div></div>
-        <span class="row-qty">×${sc.qty}</span></li>`;
+        <span class="row-qty">×${sc.qty}</span>
+        <button class="scan-adj" data-action="minus" title="1点減らす" aria-label="1点減らす">−1</button>
+        <button class="scan-del" data-action="del" title="この行を削除" aria-label="この行を削除">✕</button></li>`;
     }).join("");
   }
 
@@ -583,9 +585,29 @@
       e.preventDefault(); const inp = $("#manual-input"); const qi = $("#manual-qty");
       handleScan(inp.value, qi.value); inp.value = ""; qi.value = "1"; inp.focus();
     });
-    $("#recent-list").addEventListener("click", (e) => {
+    $("#recent-list").addEventListener("click", async (e) => {
       const li = e.target.closest("[data-sku]"); if (!li) return;
-      if (!state.itemMap[li.dataset.sku]) openItemModal(li.dataset.sku);
+      const sku = li.dataset.sku, loc = li.dataset.loc;
+      const act = e.target.closest("[data-action]") && e.target.closest("[data-action]").dataset.action;
+      if (act === "minus") {
+        try {
+          await DB.adjustScan(state.activeSessionId, sku, loc, -1);
+          state.scans = await DB.getScans(state.activeSessionId);
+          renderScan(); pulseTotal(); beep("dup"); toast("1点取り消しました");
+        } catch (err) { toast("取消に失敗: " + (err.message || err)); }
+        return;
+      }
+      if (act === "del") {
+        if (!confirm("この行の読取をまとめて削除しますか？")) return;
+        try {
+          await DB.removeScan(state.activeSessionId, sku, loc);
+          state.scans = await DB.getScans(state.activeSessionId);
+          renderScan(); pulseTotal(); toast("削除しました");
+        } catch (err) { toast("削除に失敗: " + (err.message || err)); }
+        return;
+      }
+      // 行本体タップ: マスタ外なら商品登録モーダル
+      if (!state.itemMap[sku]) openItemModal(sku);
     });
 
     // マスタ選択（バーコード無し）
