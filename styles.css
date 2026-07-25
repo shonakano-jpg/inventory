@@ -48,6 +48,21 @@ select, input, .search {
 }
 select { appearance: none; }
 
+/* 担当者バー */
+.staff-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.staff-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.staff-input {
+  flex: 1; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 15px;
+}
+
+/* 直前取消ボタン */
+.undo-last {
+  width: 100%; margin: 0 0 12px; background: var(--surface-2); color: #f4c66a;
+  border: 1px solid #5a4a20; font-weight: 700; padding: 12px; border-radius: 12px;
+}
+.undo-last:active { background: #3a2e12; }
+
 /* Scanner */
 .scanner-wrap { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; }
 /* カメラは「バーコード帯」くらいの高さに。読取は全フレームで行うので表示はcoverで中央を切り出すだけ。 */

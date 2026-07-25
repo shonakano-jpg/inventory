@@ -26,7 +26,8 @@
     _onDecode: null,
     _lastText: "",
     _lastAt: 0,
-    cooldownMs: 2000, // 1回読んだら、この時間は次の読取を受け付けない（全コード共通）
+    cooldownMs: 2000, // 同じコードを連続で受け付けない時間（重複カウント防止）
+    minGapMs: 500,    // 別のコードでも、最低これだけは間隔をあける（暴走防止）
 
     video: null,
     stream: null,
@@ -129,8 +130,10 @@
           const t = ((r && r.text) || "").trim();
           if (t) {
             const ts = Date.now();
-            // 直近の読取から cooldownMs（既定2秒）経つまでは受け付けない
-            if (ts - this._lastAt >= this.cooldownMs) {
+            const gap = ts - this._lastAt;
+            const sameAsLast = (t === this._lastText);
+            // 同じコード: cooldownMs 待つ / 別のコード: minGapMs だけ待てば即受付
+            if (gap >= this.cooldownMs || (!sameAsLast && gap >= this.minGapMs)) {
               this._lastAt = ts; this._lastText = t;
               this._onDecode && this._onDecode(t);
             }
