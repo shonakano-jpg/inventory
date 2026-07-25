@@ -50,30 +50,27 @@ select { appearance: none; }
 
 /* Scanner */
 .scanner-wrap { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; }
-#reader { width: 100%; min-height: 240px; }
-#reader video { width: 100% !important; display: block; }
-.scan-overlay { position: absolute; inset: 0; pointer-events: none; display: none; }
+/* カメラは「バーコード帯」くらいの高さに。読取は全フレームで行うので表示はcoverで中央を切り出すだけ。 */
+#reader { width: 100%; height: 0; }
+.scanner-wrap.scanning #reader { height: 168px; }
+#reader video { width: 100% !important; height: 100% !important; object-fit: cover; display: block; }
+.scan-overlay { position: absolute; left: 0; right: 0; top: 0; height: 168px; pointer-events: none; display: none; }
 .scanner-wrap.scanning .scan-overlay { display: block; }
 .scan-frame {
-  position: absolute; left: 10%; right: 10%; top: 30%; bottom: 30%;
-  border: 2px solid rgba(59,130,246,.9); border-radius: 10px;
-  box-shadow: 0 0 0 2000px rgba(0,0,0,.28);
+  position: absolute; left: 6%; right: 6%; top: 16%; bottom: 16%;
+  border: 2px solid rgba(59,130,246,.9); border-radius: 8px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,.22);
 }
+/* 操作ボタンは帯の下に（小さいカメラ帯を覗き込みで隠さない） */
 .scanner-controls {
-  position: absolute; left: 0; right: 0; bottom: 12px;
-  display: flex; gap: 10px; justify-content: center; padding: 0 12px;
+  position: static; display: flex; gap: 10px; justify-content: center; padding: 10px 12px;
 }
-.scanner-wrap:not(.scanning) .scanner-controls { position: static; padding: 12px; }
 
 .zoom-row {
-  position: absolute; left: 0; right: 0; bottom: 58px;
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 16px;
+  padding: 0 16px 10px;
 }
-.zoom-row .zoom-lbl {
-  font-size: 12px; color: #fff; white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(0,0,0,.8);
-}
+.zoom-row .zoom-lbl { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .zoom-row input[type="range"] { flex: 1; accent-color: #3b82f6; height: 24px; }
 .scanner-wrap:not(.scanning) .zoom-row { display: none; }
 
@@ -98,7 +95,8 @@ select { appearance: none; }
   margin: 12px 0; min-height: 60px; border-radius: 12px; padding: 14px 16px;
   display: none; align-items: center; gap: 10px; font-weight: 700; font-size: 17px;
 }
-.scan-feedback.show { display: flex; }
+.scan-feedback.show { display: flex; animation: fbpop .42s ease-out; }
+@keyframes fbpop { 0% { transform: scale(.96); } 45% { transform: scale(1.035); } 100% { transform: scale(1); } }
 .scan-feedback.ok { background: #10331f; color: #7ee2a8; }
 .scan-feedback.new { background: #10283f; color: #7cc0ff; }
 .scan-feedback.dup { background: #3a2e12; color: #f4c66a; }
