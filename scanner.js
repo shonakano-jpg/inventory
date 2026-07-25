@@ -99,14 +99,22 @@
       if (!v || v.readyState < 2 || !v.videoWidth) return;
       this._busy = true;
       try {
-        // 取り込みは最大1920幅（細いバーの解像度を落とさないよう極力縮小しない）
         const vw = v.videoWidth, vh = v.videoHeight;
-        const scale = Math.min(1, 1920 / vw);
-        const cw = Math.max(1, Math.round(vw * scale));
-        const ch = Math.max(1, Math.round(vh * scale));
+        // 画面に見えている帯の範囲だけを読取対象にする。
+        // 表示は object-fit: cover なので、その切り出し矩形を映像座標で再現する。
+        // （帯外にあるバーコードを誤って読まないため）
+        const dispW = v.clientWidth || vw, dispH = v.clientHeight || vh;
+        const cover = Math.max(dispW / vw, dispH / vh) || 1;
+        const srcW = Math.min(vw, dispW / cover);
+        const srcH = Math.min(vh, dispH / cover);
+        const srcX = (vw - srcW) / 2, srcY = (vh - srcH) / 2;
+        // 取り込みは最大1920幅（細いバーの解像度を落とさないよう極力縮小しない）
+        const outScale = Math.min(1, 1920 / srcW);
+        const cw = Math.max(1, Math.round(srcW * outScale));
+        const ch = Math.max(1, Math.round(srcH * outScale));
         if (this.canvas.width !== cw) this.canvas.width = cw;
         if (this.canvas.height !== ch) this.canvas.height = ch;
-        this.cctx.drawImage(v, 0, 0, cw, ch);
+        this.cctx.drawImage(v, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
         const img = this.cctx.getImageData(0, 0, cw, ch);
 
         const results = await this._reader.readBarcodes(img, {

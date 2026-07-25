@@ -57,9 +57,8 @@ select { appearance: none; }
 .scan-overlay { position: absolute; left: 0; right: 0; top: 0; height: 168px; pointer-events: none; display: none; }
 .scanner-wrap.scanning .scan-overlay { display: block; }
 .scan-frame {
-  position: absolute; left: 6%; right: 6%; top: 16%; bottom: 16%;
+  position: absolute; left: 3%; right: 3%; top: 7%; bottom: 7%;
   border: 2px solid rgba(59,130,246,.9); border-radius: 8px;
-  box-shadow: 0 0 0 2000px rgba(0,0,0,.22);
 }
 /* 操作ボタンは帯の下に（小さいカメラ帯を覗き込みで隠さない） */
 .scanner-controls {
