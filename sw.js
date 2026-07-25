@@ -2,12 +2,11 @@
    - 自アプリのファイル(HTML/CSS/JS)は network-first（更新を確実に反映、オフライン時のみキャッシュ）
    - 外部ライブラリ(unpkg)は cache-first（変わらないので高速化）
 */
-const CACHE = "furugi-tanaoroshi-v7";
+const CACHE = "furugi-tanaoroshi-v8";
 const ASSETS = [
   "./", "./index.html", "./styles.css",
   "./config.js", "./db.js", "./scanner.js", "./app.js",
   "./manifest.webmanifest", "./icons/icon.svg", "./master.csv", "./stores.json",
-  "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
   "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js",
 ];
 
@@ -39,7 +38,7 @@ self.addEventListener("fetch", (e) => {
     // cache-first（外部ライブラリ）
     e.respondWith(
       caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-        if (res && res.ok && url.includes("unpkg.com")) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+        if (res && res.ok && (url.includes("unpkg.com") || url.includes("jsdelivr"))) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
         return res;
       }))
     );

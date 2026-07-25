@@ -94,7 +94,7 @@ index.html   画面
 styles.css   スタイル
 app.js       アプリ本体（画面制御・CSV・レポート）
 db.js        データ層（ローカル/Supabase切替・リアルタイム）
-scanner.js   バーコード読取（html5-qrcode）
+scanner.js   バーコード読取（getUserMedia＋zxing-wasm）
 config.js    既定の接続設定（任意）
 sw.js        Service Worker（オフライン対応・自動更新）
 manifest.webmanifest   PWA設定

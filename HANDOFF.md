@@ -41,7 +41,10 @@
   2. Supabase UMDの読込URLは `dist/umd/supabase.js`（`.min.js` は404）。`db.js` の loadSupabaseLib 参照。
 
 ## ファイル
-`index.html`/`styles.css`/`app.js`(画面・CSV・レポート)/`db.js`(データ層: local⇔Supabase透過切替・リアルタイム)/`scanner.js`(html5-qrcode)/`config.js`(接続情報埋込)/`sw.js`(オフライン)/`master.csv`/`stores.json`/`supabase-schema.sql`
+`index.html`/`styles.css`/`app.js`(画面・CSV・レポート)/`db.js`(データ層: local⇔Supabase透過切替・リアルタイム)/`scanner.js`(**getUserMedia＋zxing-wasm** でカメラ制御・デコード)/`config.js`(接続情報埋込)/`sw.js`(オフライン)/`master.csv`/`stores.json`/`supabase-schema.sql`
+
+### 読取エンジンの経緯（重要）
+当初 html5-qrcode(内蔵ZXing-JS) を使用したが、**実物の値札(小さめのCode128)を実機で読めなかった**（強力なzxing-cppでは同映像を読めたのでエンジンの弱さが原因）。→ **scanner.js を getUserMedia＋zxing-wasm(=zxing-cppのWASM版) に置換**。ESMを`cdn.jsdelivr.net/npm/zxing-wasm@3.1.2`から動的import、wasmは同版を自動取得。約6fpsでフレームをcanvas取込→`readBarcodes`。ズーム/ライト/連続AFはMediaStreamTrackを直接制御。html5-qrcodeは廃止（index.htmlのscript削除済み）。
 
 ## 次にやること
 - **実データ（実際の値札・業務フロー）で試用**し、読取精度・操作感を確認→必要なら調整。
