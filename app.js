@@ -52,6 +52,35 @@
     if (navigator.vibrate) navigator.vibrate(kind === "bad" ? [80, 40, 80] : 50);
   }
 
+  // iOSは音源をユーザー操作中に解錠しないと鳴らない。カメラ開始タップで呼ぶ。
+  function unlockAudio() {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+    } catch {}
+  }
+
+  // カメラ全面フラッシュ＋大きな確認テキスト（音/振動が出ない端末の主フィードバック）
+  let flashT;
+  function flashScan(kind, text) {
+    const f = document.getElementById("scan-flash");
+    if (!f) return;
+    const t = document.getElementById("scan-flash-text");
+    if (t) t.textContent = text || "";
+    f.className = "scan-flash " + kind;
+    void f.offsetWidth; // アニメ再起動
+    f.classList.add("go");
+    clearTimeout(flashT);
+    flashT = setTimeout(() => { f.className = "scan-flash"; }, 650);
+  }
+
+  // 総点数カウンタを一瞬拡大（増えたことを分かりやすく）
+  function pulseTotal() {
+    const el = $("#stat-total");
+    if (!el) return;
+    el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");
+  }
+
   function renderBadge() {
     const b = $("#conn-badge");
     if (DB.mode === "cloud") { b.textContent = "クラウド共有"; b.className = "badge badge-cloud"; }
@@ -164,12 +193,12 @@
       const it = res.item;
       const locTag = state.location;
       const plus = n > 1 ? ` +${n}` : "";
-      if (res.status === "matched") { beep("ok"); showFeedback("ok", (it && it.name ? it.name : "一致") + " / " + locTag + plus, sku); }
-      else if (res.status === "new") { beep("ok"); showFeedback("new", "マスタ外（新規） / " + locTag + plus, sku); }
-      else { beep("dup"); showFeedback("dup", `${locTag} ×${res.qty}` + (it && it.name ? " · " + it.name : ""), sku); }
+      if (res.status === "matched") { beep("ok"); flashScan("ok", `✓ ＋${n}　${it && it.name ? it.name : "一致"}`); showFeedback("ok", (it && it.name ? it.name : "一致") + " / " + locTag + plus, sku); pulseTotal(); }
+      else if (res.status === "new") { beep("ok"); flashScan("new", `✓ ＋${n}　マスタ外（新規）`); showFeedback("new", "マスタ外（新規） / " + locTag + plus, sku); pulseTotal(); }
+      else { beep("dup"); flashScan("dup", `＋${n} → 合計 ×${res.qty}　${it && it.name ? it.name : ""}`); showFeedback("dup", `${locTag} ×${res.qty}` + (it && it.name ? " · " + it.name : ""), sku); pulseTotal(); }
       state.scans = await DB.getScans(state.activeSessionId);
       renderScan();
-    } catch (e) { beep("bad"); showFeedback("bad", "登録エラー", sku); toast(e.message || String(e)); }
+    } catch (e) { beep("bad"); flashScan("bad", "✕ エラー"); showFeedback("bad", "登録エラー", sku); toast(e.message || String(e)); }
   }
 
   /* ---------- 数量入力モーダル ---------- */
@@ -205,6 +234,7 @@
       btn.textContent = "カメラ開始"; torchBtn.hidden = true; zoomRow.hidden = true;
     } else {
       if (!activeSession()) { openSessionModal(); return; }
+      unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
       try {
         btn.textContent = "起動中…";
         await Scanner.start("reader", handleScan);
