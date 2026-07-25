@@ -132,6 +132,15 @@ select { appearance: none; }
 .row-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-sub { font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; margin-top: 2px; }
 .row-qty { font-size: 20px; font-weight: 800; min-width: 34px; text-align: right; }
+.scan-adj, .scan-del {
+  flex: none; border: 1px solid var(--line); border-radius: 10px;
+  min-width: 44px; height: 40px; padding: 0 10px; font-weight: 800; font-size: 15px;
+  cursor: pointer; background: var(--surface-2); color: var(--text);
+}
+.scan-adj { color: #f4c66a; border-color: #5a4a20; }
+.scan-adj:active { background: #3a2e12; }
+.scan-del { color: #f39a9a; border-color: #5a2626; }
+.scan-del:active { background: #3a1414; }
 .pill { font-size: 11px; padding: 3px 8px; border-radius: 999px; font-weight: 700; }
 .pill-ok { background: #10331f; color: var(--green); }
 .pill-new { background: #10283f; color: #7cc0ff; }
