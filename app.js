@@ -224,8 +224,10 @@
   let fbT;
   function showFeedback(kind, msg, sku) {
     const el = $("#scan-feedback");
-    el.className = "scan-feedback show " + kind;
+    el.className = "scan-feedback " + kind;
     el.innerHTML = `<span>${esc(msg)}</span>` + (sku ? ` <span class="fb-sku">${esc(sku)}</span>` : "");
+    void el.offsetWidth; // ポップアニメを毎回再生
+    el.classList.add("show");
     clearTimeout(fbT); fbT = setTimeout(() => el.classList.remove("show"), 2600);
   }
 
