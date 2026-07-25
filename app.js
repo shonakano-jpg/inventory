@@ -49,15 +49,42 @@
       g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.18);
       o.start(); o.stop(actx.currentTime + 0.19);
     } catch {}
-    if (navigator.vibrate) navigator.vibrate(kind === "bad" ? [80, 40, 80] : 50);
+    haptic(kind);
   }
 
-  // iOSは音源をユーザー操作中に解錠しないと鳴らない。カメラ開始タップで呼ぶ。
+  // 振動/ハプティクス。
+  // ・Android等: navigator.vibrate（標準）
+  // ・iOS 17.4+: <input switch> のトグルで微振動を出せる小技（Safariは
+  //   navigator.vibrate 非対応のため）。未対応iOSでは無反応（無害）。
+  let _hapticLabel = null;
+  function ensureHaptic() {
+    if (_hapticLabel) return _hapticLabel;
+    try {
+      const label = document.createElement("label");
+      label.setAttribute("aria-hidden", "true");
+      label.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.setAttribute("switch", ""); // Safari独自: スイッチ表示＋トグルでハプティクス
+      label.appendChild(input);
+      document.body.appendChild(label);
+      _hapticLabel = label;
+    } catch {}
+    return _hapticLabel;
+  }
+  function haptic(kind) {
+    try { if (navigator.vibrate) navigator.vibrate(kind === "bad" ? [80, 40, 80] : 45); } catch {}
+    try { const l = ensureHaptic(); if (l) l.click(); } catch {}
+  }
+
+  // iOSは音源/ハプティクスをユーザー操作中に用意しないと出ない。カメラ開始タップで呼ぶ。
   function unlockAudio() {
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
       if (actx.state === "suspended") actx.resume();
     } catch {}
+    // ハプティクス用の要素も操作中に用意（iOS）
+    try { const l = ensureHaptic(); if (l) l.click(); } catch {}
   }
 
   // カメラ全面フラッシュ＋大きな確認テキスト（音/振動が出ない端末の主フィードバック）
