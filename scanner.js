@@ -27,7 +27,12 @@
       if (this.running) return;
       if (!window.Html5Qrcode) throw new Error("スキャナライブラリ未読込");
       this._onDecode = onDecode;
-      this.h5 = new window.Html5Qrcode(elementId, {
+
+      // Html5Qrcode は start() が失敗すると内部状態が「遷移中」のままになり、
+      // 同じインスタンスで再度 start() すると
+      // "Cannot transition to a new state, already under transition" になる。
+      // そのため試行ごとにインスタンスを作り直す。
+      const makeInstance = () => new window.Html5Qrcode(elementId, {
         formatsToSupport: supportedFormats(),
         useBarCodeDetectorIfSupported: true,
         verbose: false,
@@ -56,33 +61,39 @@
         experimentalFeatures: { useBarCodeDetectorIfSupported: true },
       };
 
-      // 高解像度＋連続オートフォーカスを要求。
       // 値札のバーコードは細い（Code128/EAN-13）ため、既定の低解像度だと
-      // ピンボケで読めない。解像度を上げてバー1本あたりのピクセル数を稼ぐ。
-      // advanced/focusMode は未対応端末では無視されるだけで安全。
-      const hiRes = {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        advanced: [{ focusMode: "continuous" }],
-      };
+      // ピンボケで読めない。解像度を ideal で上げてバー1本あたりの画素を稼ぐ。
+      // ideal 指定は拒否されない（best-effort）。合焦(focusMode)は getUserMedia で
+      // 弾かれる端末があるので初回制約には入れず、起動後に別途適用する。
+      const attempts = [
+        { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        { facingMode: "environment" },
+      ];
 
-      try {
-        await this.h5.start(hiRes, config, success, fail);
-      } catch (e1) {
+      let started = false, lastErr = null;
+      for (const cam of attempts) {
+        this.h5 = makeInstance();
         try {
-          // 解像度指定で弾かれる端末向け（facingModeのみ）
-          await this.h5.start({ facingMode: "environment" }, config, success, fail);
-        } catch (e2) {
-          // 背面指定が失敗する端末向けフォールバック
-          const cams = await window.Html5Qrcode.getCameras();
-          if (!cams || !cams.length) throw new Error("カメラが見つかりません");
-          const back = cams.find((c) => /back|rear|environment|背面/i.test(c.label)) || cams[cams.length - 1];
-          await this.h5.start(back.id, config, success, fail);
+          await this.h5.start(cam, config, success, fail);
+          started = true; break;
+        } catch (e) {
+          lastErr = e;
+          try { await this.h5.stop(); } catch {}
+          try { await this.h5.clear(); } catch {}
         }
       }
+
+      if (!started) {
+        // 背面カメラをID指定で最終フォールバック
+        this.h5 = makeInstance();
+        const cams = await window.Html5Qrcode.getCameras();
+        if (!cams || !cams.length) throw lastErr || new Error("カメラが見つかりません");
+        const back = cams.find((c) => /back|rear|environment|背面/i.test(c.label)) || cams[cams.length - 1];
+        await this.h5.start(back.id, config, success, fail);
+      }
+
       this.running = true;
-      // 起動後にも連続オートフォーカスを適用（対応端末のみ・失敗は無視）
+      // 起動後に連続オートフォーカスを適用（対応端末のみ・失敗は無視）
       this._applyFocus();
     },
 
