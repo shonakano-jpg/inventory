@@ -65,8 +65,19 @@ begin
 end;
 $$;
 
--- リアルタイム配信を有効化
-alter publication supabase_realtime add table public.items, public.stores, public.sessions, public.scans;
+-- リアルタイム配信を有効化（再実行してもエラーにならないよう存在チェック）
+do $$
+declare t text;
+begin
+  foreach t in array array['items','stores','sessions','scans'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname='supabase_realtime' and schemaname='public' and tablename=t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
 
 -- ------------------------------------------------------------
 --  アクセス制御（RLS）: anonキーを持つ全員が読み書き可（店舗内運用向け最小構成）

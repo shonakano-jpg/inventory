@@ -120,7 +120,7 @@
     return new Promise((resolve, reject) => {
       if (window.supabase && window.supabase.createClient) return resolve();
       const s = document.createElement("script");
-      s.src = "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js";
+      s.src = "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js";
       s.onload = resolve;
       s.onerror = () => reject(new Error("Supabaseライブラリの読込に失敗"));
       document.head.appendChild(s);
