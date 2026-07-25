@@ -26,6 +26,11 @@
       <button id="new-session-btn" class="btn btn-ghost">＋新規</button>
     </div>
 
+    <div class="staff-bar">
+      <label class="staff-label" for="staff-name">担当者</label>
+      <input id="staff-name" class="staff-input" placeholder="名前を入力（任意）" autocomplete="off" />
+    </div>
+
     <div class="loc-seg" id="loc-seg">
       <button class="loc-btn active" data-loc="店内在庫">店内</button>
       <button class="loc-btn" data-loc="バックヤード在庫">バックヤード</button>
@@ -47,6 +52,8 @@
     </div>
 
     <div id="scan-feedback" class="scan-feedback"></div>
+
+    <button id="undo-last" class="btn btn-wide undo-last" hidden>↩ 直前の読取を取り消す</button>
 
     <form id="manual-form" class="manual-form">
       <input id="manual-input" inputmode="text" autocomplete="off"

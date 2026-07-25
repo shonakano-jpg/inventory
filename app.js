@@ -27,6 +27,7 @@
     pickOpen: false,
     pendingSku: "",
     reportStore: "",
+    lastScan: null, // 直前の読取（取消用）: { sku, location, qty }
   };
 
   /* ---------- トースト ---------- */
@@ -141,6 +142,7 @@
   function activeSession() { return state.sessions.find((s) => s.id === state.activeSessionId) || null; }
   function setActiveSession(id, doReload = true) {
     state.activeSessionId = id; localStorage.setItem(LS_ACTIVE, id);
+    hideUndoLast(); // セッションを切り替えたら直前取消は無効化
     if (doReload) reload();
   }
   function knownStores() {
@@ -225,9 +227,28 @@
       if (res.status === "matched") { beep("ok"); flashScan("ok", `✓ ＋${n}　${it && it.name ? it.name : "一致"}`); showFeedback("ok", (it && it.name ? it.name : "一致") + " / " + locTag + plus, sku); pulseTotal(); }
       else if (res.status === "new") { beep("ok"); flashScan("new", `✓ ＋${n}　マスタ外（新規）`); showFeedback("new", "マスタ外（新規） / " + locTag + plus, sku); pulseTotal(); }
       else { beep("dup"); flashScan("dup", `＋${n} → 合計 ×${res.qty}　${it && it.name ? it.name : ""}`); showFeedback("dup", `${locTag} ×${res.qty}` + (it && it.name ? " · " + it.name : ""), sku); pulseTotal(); }
+      state.lastScan = { sku, location: locTag, qty: n };
+      showUndoLast(it && it.name ? it.name : (state.itemMap[sku] ? "" : "マスタ外"), n);
       state.scans = await DB.getScans(state.activeSessionId);
       renderScan();
     } catch (e) { beep("bad"); flashScan("bad", "✕ エラー"); showFeedback("bad", "登録エラー", sku); toast(e.message || String(e)); }
+  }
+
+  function showUndoLast(name, qty) {
+    const b = $("#undo-last"); if (!b) return;
+    b.textContent = `↩ 直前を取り消す（${name || ""}${qty > 1 ? " ×" + qty : ""}）`;
+    b.hidden = false;
+  }
+  function hideUndoLast() { const b = $("#undo-last"); if (b) b.hidden = true; state.lastScan = null; }
+
+  async function undoLastScan() {
+    const ls = state.lastScan; if (!ls) return;
+    try {
+      await DB.adjustScan(state.activeSessionId, ls.sku, ls.location, -ls.qty);
+      hideUndoLast();
+      state.scans = await DB.getScans(state.activeSessionId);
+      renderScan(); pulseTotal(); haptic("dup"); toast("直前の読取を取り消しました");
+    } catch (err) { toast("取消に失敗: " + (err.message || err)); }
   }
 
   /* ---------- 数量入力モーダル ---------- */
@@ -598,6 +619,17 @@
     $("#session-select").addEventListener("change", (e) => setActiveSession(e.target.value));
     $("#new-session-btn").addEventListener("click", openSessionModal);
 
+    // 担当者名（スキャン画面から常時編集可・設定と同期）
+    const staffInput = $("#staff-name");
+    if (staffInput) {
+      staffInput.value = DB.getDeviceName();
+      staffInput.addEventListener("input", (e) => {
+        DB.setDeviceName(e.target.value);
+        const d = $("#device-name"); if (d) d.value = e.target.value;
+      });
+    }
+    $("#undo-last").addEventListener("click", undoLastScan);
+
     $$(".loc-btn").forEach((b) => b.addEventListener("click", () => {
       state.location = b.dataset.loc; localStorage.setItem(LS_LOC, state.location);
       $$(".loc-btn").forEach((x) => x.classList.toggle("active", x === b));
@@ -698,7 +730,7 @@
     $("#item-modal").addEventListener("click", (e) => { if (e.target.id === "item-modal") closeItemModal(); });
 
     // 設定
-    $("#device-name").addEventListener("change", (e) => { DB.setDeviceName(e.target.value); toast("端末名を保存"); });
+    $("#device-name").addEventListener("change", (e) => { DB.setDeviceName(e.target.value); const s = $("#staff-name"); if (s) s.value = e.target.value; toast("担当者名を保存"); });
     $("#store-add-btn").addEventListener("click", async () => {
       const name = $("#store-name").value.trim();
       if (!name) { toast("店舗名を入力してください"); return; }
