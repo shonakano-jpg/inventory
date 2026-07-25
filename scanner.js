@@ -48,23 +48,48 @@
       const config = {
         fps: 12,
         qrbox: (vw, vh) => {
-          const w = Math.min(vw, vh) * 0.82;
-          return { width: Math.round(w), height: Math.round(w * 0.62) };
+          // 1次元バーコード向けに横長・広めの枠（合焦と位置合わせの許容度UP）
+          const w = Math.min(vw, vh) * 0.9;
+          return { width: Math.round(w), height: Math.round(w * 0.55) };
         },
         aspectRatio: 1.4,
         experimentalFeatures: { useBarCodeDetectorIfSupported: true },
       };
 
+      // 高解像度＋連続オートフォーカスを要求。
+      // 値札のバーコードは細い（Code128/EAN-13）ため、既定の低解像度だと
+      // ピンボケで読めない。解像度を上げてバー1本あたりのピクセル数を稼ぐ。
+      // advanced/focusMode は未対応端末では無視されるだけで安全。
+      const hiRes = {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced: [{ focusMode: "continuous" }],
+      };
+
       try {
-        await this.h5.start({ facingMode: "environment" }, config, success, fail);
-      } catch (e) {
-        // 背面指定が失敗する端末向けフォールバック
-        const cams = await window.Html5Qrcode.getCameras();
-        if (!cams || !cams.length) throw new Error("カメラが見つかりません");
-        const back = cams.find((c) => /back|rear|environment|背面/i.test(c.label)) || cams[cams.length - 1];
-        await this.h5.start(back.id, config, success, fail);
+        await this.h5.start(hiRes, config, success, fail);
+      } catch (e1) {
+        try {
+          // 解像度指定で弾かれる端末向け（facingModeのみ）
+          await this.h5.start({ facingMode: "environment" }, config, success, fail);
+        } catch (e2) {
+          // 背面指定が失敗する端末向けフォールバック
+          const cams = await window.Html5Qrcode.getCameras();
+          if (!cams || !cams.length) throw new Error("カメラが見つかりません");
+          const back = cams.find((c) => /back|rear|environment|背面/i.test(c.label)) || cams[cams.length - 1];
+          await this.h5.start(back.id, config, success, fail);
+        }
       }
       this.running = true;
+      // 起動後にも連続オートフォーカスを適用（対応端末のみ・失敗は無視）
+      this._applyFocus();
+    },
+
+    async _applyFocus() {
+      try {
+        await this.h5.applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] });
+      } catch {}
     },
 
     async stop() {
