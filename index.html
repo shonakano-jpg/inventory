@@ -1,0 +1,220 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#111827" />
+<title>古着棚卸し</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/icon.svg" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="stylesheet" href="styles.css" />
+
+<header class="topbar">
+  <div class="topbar-title">古着棚卸し</div>
+  <div id="conn-badge" class="badge badge-local" title="接続状態">ローカル</div>
+</header>
+
+<main id="app">
+
+  <!-- ===== スキャン ===== -->
+  <section id="view-scan" class="view active">
+    <div class="session-bar">
+      <div class="session-info">
+        <span class="session-label">棚卸しセッション（店舗）</span>
+        <select id="session-select"></select>
+      </div>
+      <button id="new-session-btn" class="btn btn-ghost">＋新規</button>
+    </div>
+
+    <div class="loc-seg" id="loc-seg">
+      <button class="loc-btn active" data-loc="店内在庫">店内</button>
+      <button class="loc-btn" data-loc="バックヤード在庫">バックヤード</button>
+      <button class="loc-btn" data-loc="その他倉庫">その他倉庫</button>
+    </div>
+
+    <div id="scanner-wrap" class="scanner-wrap">
+      <div id="reader"></div>
+      <div id="scan-overlay" class="scan-overlay"><div class="scan-frame"></div></div>
+      <div class="scanner-controls">
+        <button id="cam-toggle" class="btn btn-primary btn-lg">カメラ開始</button>
+        <button id="torch-toggle" class="btn btn-ghost" hidden>ライト</button>
+      </div>
+    </div>
+
+    <div id="scan-feedback" class="scan-feedback"></div>
+
+    <form id="manual-form" class="manual-form">
+      <input id="manual-input" inputmode="text" autocomplete="off"
+             placeholder="バーコードを手入力 / 外付けスキャナ" />
+      <input id="manual-qty" class="qty-input" inputmode="numeric" value="1" aria-label="数量" title="数量" />
+      <button class="btn btn-secondary" type="submit">登録</button>
+    </form>
+
+    <button id="pick-toggle" class="btn btn-ghost btn-wide">🏷 バーコードが無い在庫を選んで数量入力</button>
+    <div id="pick-panel" class="pick-panel" hidden>
+      <input id="pick-search" class="search" placeholder="カテゴリ・価格で検索（例：デニム 1980）" />
+      <ul id="pick-list" class="pick-list"></ul>
+    </div>
+
+    <div class="progress-row">
+      <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">総点数</div></div>
+      <div class="stat"><div class="stat-num" id="stat-kinds">0</div><div class="stat-lbl">品目数</div></div>
+      <div class="stat"><div class="stat-num" id="stat-unknown">0</div><div class="stat-lbl">マスタ外</div></div>
+    </div>
+
+    <h3 class="list-title">最近の読み取り</h3>
+    <ul id="recent-list" class="recent-list"></ul>
+  </section>
+
+  <!-- ===== マスタ ===== -->
+  <section id="view-master" class="view">
+    <div class="toolbar">
+      <input id="master-search" class="search" placeholder="コード・カテゴリで検索" />
+      <button id="master-add-btn" class="btn btn-primary">＋商品</button>
+    </div>
+    <div class="toolbar">
+      <label class="btn btn-ghost file-label">CSV取込<input id="csv-input" type="file" accept=".csv" hidden /></label>
+      <button id="csv-export-btn" class="btn btn-ghost">CSV書出</button>
+      <span id="master-count" class="muted"></span>
+    </div>
+    <ul id="master-list" class="master-list"></ul>
+  </section>
+
+  <!-- ===== レポート（店舗単位） ===== -->
+  <section id="view-report" class="view">
+    <div class="report-head">
+      <button id="report-back" class="btn btn-ghost" hidden>← 店舗一覧</button>
+      <h2 id="report-title">店舗別レポート</h2>
+      <button id="report-export-btn" class="btn btn-primary">CSV書出</button>
+    </div>
+    <div id="report-body"></div>
+  </section>
+
+  <!-- ===== 設定 ===== -->
+  <section id="view-settings" class="view">
+    <div class="setting-group">
+      <h3>担当者名</h3>
+      <p class="muted">複数人で棚卸しするとき、誰が読み取ったかを記録します。</p>
+      <input id="device-name" class="search" placeholder="例：田中" />
+    </div>
+
+    <div class="setting-group">
+      <h3>店舗マスタ</h3>
+      <p class="muted">棚卸しセッション作成時に選べる店舗。追加・削除できます。</p>
+      <div class="store-add">
+        <input id="store-name" placeholder="店舗名（例：NOTIME 下北沢店）" />
+        <div class="modal-row">
+          <input id="store-brand" placeholder="ブランド（NOTIME等）" />
+          <input id="store-area" placeholder="エリア（任意）" />
+        </div>
+        <div class="btn-row">
+          <button id="store-add-btn" class="btn btn-primary">店舗を追加</button>
+          <button id="store-load-official" class="btn btn-ghost">公式店舗リストを読込（30店舗）</button>
+        </div>
+      </div>
+      <ul id="store-list-ui" class="store-list-ui"></ul>
+    </div>
+
+    <div class="setting-group">
+      <h3>クラウド共有（Supabase）<span class="req">必須</span></h3>
+      <p class="muted">全端末・全店舗でリアルタイムに在庫を共有します。各端末で一度URLとanonキーを設定してください。</p>
+      <input id="sb-url" class="search" placeholder="Supabase URL (https://xxx.supabase.co)" />
+      <input id="sb-key" class="search" placeholder="anon public key" />
+      <div class="btn-row">
+        <button id="sb-save-btn" class="btn btn-primary">接続して保存</button>
+        <button id="sb-clear-btn" class="btn btn-ghost">接続解除</button>
+      </div>
+      <div id="sb-status" class="sb-status muted"></div>
+      <details class="help">
+        <summary>セットアップ手順</summary>
+        <ol>
+          <li><a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> で無料プロジェクトを作成</li>
+          <li>SQL Editor を開き、配布の <code>supabase-schema.sql</code> を貼って実行</li>
+          <li>Project Settings → API から <b>Project URL</b> と <b>anon public key</b> をコピー</li>
+          <li>上の欄に貼って「接続して保存」</li>
+        </ol>
+      </details>
+    </div>
+
+    <div class="setting-group">
+      <h3>データ</h3>
+      <div class="btn-row"><button id="wipe-btn" class="btn btn-danger">この端末のローカルデータを消去</button></div>
+    </div>
+    <p class="muted center">古着棚卸し PWA</p>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <button class="tab active" data-view="scan"><span class="tab-ic">▣</span>スキャン</button>
+  <button class="tab" data-view="master"><span class="tab-ic">≣</span>マスタ</button>
+  <button class="tab" data-view="report"><span class="tab-ic">◪</span>レポート</button>
+  <button class="tab" data-view="settings"><span class="tab-ic">⚙</span>設定</button>
+</nav>
+
+<!-- セッション作成モーダル -->
+<div id="session-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>棚卸しセッションを作成</h3>
+    <label>店舗
+      <input id="sm-store" list="store-datalist" placeholder="店舗を選択または入力" />
+      <datalist id="store-datalist"></datalist>
+    </label>
+    <label>棚卸日<input id="sm-name" placeholder="例：2026-07-25" /></label>
+    <div class="btn-row">
+      <button id="sm-create" class="btn btn-primary">作成</button>
+      <button id="sm-cancel" class="btn btn-ghost">キャンセル</button>
+    </div>
+    <button id="sm-close-session" class="btn btn-danger" style="margin-top:6px">このセッションを完了にする</button>
+  </div>
+</div>
+
+<!-- 数量入力モーダル（バーコード無し在庫の点数登録） -->
+<div id="qty-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h3 id="qty-title">数量を入力</h3>
+    <div id="qty-sub" class="muted"></div>
+    <div class="qty-stepper">
+      <button id="qty-minus" type="button" class="btn btn-ghost qty-step">－</button>
+      <input id="qty-value" inputmode="numeric" value="1" />
+      <button id="qty-plus" type="button" class="btn btn-ghost qty-step">＋</button>
+    </div>
+    <div class="qty-quick">
+      <button type="button" data-q="5">+5</button>
+      <button type="button" data-q="10">+10</button>
+      <button type="button" data-q="20">+20</button>
+      <button type="button" data-q="50">+50</button>
+    </div>
+    <div class="btn-row">
+      <button id="qty-add" class="btn btn-primary btn-lg">この数量で登録</button>
+      <button id="qty-cancel" class="btn btn-ghost">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- 商品編集モーダル -->
+<div id="item-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h3 id="item-modal-title">商品を追加</h3>
+    <label>コード / バーコード<input id="im-sku" /></label>
+    <label>商品名<input id="im-name" /></label>
+    <label>カテゴリ<input id="im-category" /></label>
+    <div class="modal-row">
+      <label>単価<input id="im-price" inputmode="numeric" /></label>
+      <label>想定数<input id="im-expected" inputmode="numeric" placeholder="任意" /></label>
+    </div>
+    <div class="btn-row">
+      <button id="im-save" class="btn btn-primary">保存</button>
+      <button id="im-delete" class="btn btn-danger">削除</button>
+      <button id="im-cancel" class="btn btn-ghost">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script>
+<script src="db.js"></script>
+<script src="scanner.js"></script>
+<script src="app.js"></script>
