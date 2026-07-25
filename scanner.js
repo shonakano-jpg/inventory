@@ -93,14 +93,43 @@
       }
 
       this.running = true;
-      // 起動後に連続オートフォーカスを適用（対応端末のみ・失敗は無視）
-      this._applyFocus();
+      // 起動後にフォーカス・ズームを最適化（対応端末のみ・失敗は無視）
+      this._tuneCamera();
     },
 
-    async _applyFocus() {
+    _zoomCap: null,
+
+    async _tuneCamera() {
+      // 連続オートフォーカス（対応端末のみ）
+      try { await this.h5.applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch {}
+      // ズーム対応端末なら初期倍率を上げ、細いバーコードを大きく写して画素を稼ぐ
+      this._zoomCap = null;
       try {
-        await this.h5.applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] });
+        const caps = this.h5.getRunningTrackCapabilities && this.h5.getRunningTrackCapabilities();
+        if (caps && caps.zoom && typeof caps.zoom.max === "number") {
+          const min = (typeof caps.zoom.min === "number") ? caps.zoom.min : 1;
+          const max = caps.zoom.max;
+          const step = caps.zoom.step || 0.1;
+          this._zoomCap = { min, max, step };
+          const target = Math.min(max, Math.max(min, 2)); // 既定2倍
+          await this.setZoom(target);
+        }
       } catch {}
+    },
+
+    zoomCap() { return this._zoomCap; },
+
+    async setZoom(v) {
+      if (!this.h5 || !this.running) return false;
+      try { await this.h5.applyVideoConstraints({ advanced: [{ zoom: v }] }); return true; }
+      catch { return false; }
+    },
+
+    currentZoom() {
+      try {
+        const s = this.h5 && this.h5.getRunningTrackSettings && this.h5.getRunningTrackSettings();
+        return s && typeof s.zoom === "number" ? s.zoom : null;
+      } catch { return null; }
     },
 
     async stop() {

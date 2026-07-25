@@ -199,17 +199,27 @@
   }
 
   async function toggleCamera() {
-    const btn = $("#cam-toggle"), wrap = $("#scanner-wrap"), torchBtn = $("#torch-toggle");
+    const btn = $("#cam-toggle"), wrap = $("#scanner-wrap"), torchBtn = $("#torch-toggle"), zoomRow = $("#zoom-row");
     if (Scanner.isScanning()) {
       await Scanner.stop(); wrap.classList.remove("scanning");
-      btn.textContent = "カメラ開始"; torchBtn.hidden = true;
+      btn.textContent = "カメラ開始"; torchBtn.hidden = true; zoomRow.hidden = true;
     } else {
       if (!activeSession()) { openSessionModal(); return; }
       try {
         btn.textContent = "起動中…";
         await Scanner.start("reader", handleScan);
         wrap.classList.add("scanning"); btn.textContent = "カメラ停止";
-        setTimeout(() => { if (Scanner.torchSupported()) torchBtn.hidden = false; }, 400);
+        setTimeout(() => {
+          if (Scanner.torchSupported()) torchBtn.hidden = false;
+          const zc = Scanner.zoomCap();
+          if (zc) {
+            const r = $("#zoom-range");
+            r.min = zc.min; r.max = zc.max; r.step = zc.step || 0.1;
+            const cur = Scanner.currentZoom();
+            if (cur != null) r.value = cur;
+            zoomRow.hidden = false;
+          } else { zoomRow.hidden = true; }
+        }, 500);
       } catch (e) {
         btn.textContent = "カメラ開始";
         toast("カメラ起動失敗: " + (e.message || e) + "（HTTPSまたはlocalhostで開いてください）");
@@ -534,6 +544,7 @@
     }));
 
     $("#cam-toggle").addEventListener("click", toggleCamera);
+    $("#zoom-range").addEventListener("input", (e) => { Scanner.setZoom(parseFloat(e.target.value)); });
     $("#torch-toggle").addEventListener("click", async function () {
       this._on = !this._on; await Scanner.toggleTorch(this._on);
       this.classList.toggle("btn-primary", this._on);

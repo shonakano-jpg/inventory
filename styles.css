@@ -65,6 +65,18 @@ select { appearance: none; }
 }
 .scanner-wrap:not(.scanning) .scanner-controls { position: static; padding: 12px; }
 
+.zoom-row {
+  position: absolute; left: 0; right: 0; bottom: 58px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 16px;
+}
+.zoom-row .zoom-lbl {
+  font-size: 12px; color: #fff; white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+}
+.zoom-row input[type="range"] { flex: 1; accent-color: #3b82f6; height: 24px; }
+.scanner-wrap:not(.scanning) .zoom-row { display: none; }
+
 /* Feedback */
 .scan-feedback {
   margin: 12px 0; min-height: 54px; border-radius: 12px; padding: 12px 14px;
