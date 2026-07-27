@@ -67,6 +67,36 @@ select { appearance: none; }
   border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 16px;
 }
 
+/* ラック確認ステータス */
+.rack-status {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.rack-status .rs-info { flex: 1; min-width: 60%; font-size: 14px; line-height: 1.4; }
+.rack-status .rs-sub { font-size: 12px; color: var(--muted); }
+.rack-status .rs-hint { font-size: 13px; color: var(--muted); }
+.rack-status.none { border-color: #244a6e; }
+.rack-status.prov { background: #3a2e12; border-color: #5a4a20; }
+.rack-status.done { background: #10331f; border-color: #1f5a37; }
+.rack-status.warn { background: #3a2410; border-color: #6e4a24; color: #f4c66a; font-size: 13px; }
+.rack-status .btn { padding: 10px 12px; font-weight: 700; }
+.rack-status .rs-reset { flex: none; }
+
+/* ラック進捗 */
+.rackprog-toggle { width: 100%; margin: 0 0 8px; }
+.rackprog-toggle.open { background: var(--surface-2); }
+.rackprog-panel { margin: 0 0 12px; }
+.rackprog-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rackprog-item { cursor: pointer; }
+.rackprog-item.rp-checked { border-left: 4px solid #10b981; }
+.rackprog-item.rp-provisional { border-left: 4px solid #f59e0b; }
+.rackprog-item.rp-none { border-left: 4px solid #3b4658; }
+.rp-badge { font-size: 12px; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin-left: 4px; }
+.rp-badge-checked { background: #10331f; color: #7ee2a8; }
+.rp-badge-provisional { background: #3a2e12; color: #f4c66a; }
+.rp-badge-none { background: var(--surface-2); color: var(--muted); }
+
 /* 直前取消ボタン */
 .undo-last {
   width: 100%; margin: 0 0 12px; background: var(--surface-2); color: #f4c66a;

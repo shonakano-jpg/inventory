@@ -42,6 +42,11 @@
       <input id="rack-input" class="rack-input" list="rack-datalist" placeholder="棚卸し中のラック（例：A-1 / レジ横）" autocomplete="off" />
       <datalist id="rack-datalist"></datalist>
     </div>
+    <div id="rack-status" class="rack-status" hidden></div>
+    <button id="rackprog-toggle" class="btn btn-ghost btn-wide rackprog-toggle" hidden>🗂 ラックの進捗を見る</button>
+    <div id="rackprog-panel" class="rackprog-panel" hidden>
+      <ul id="rackprog-list" class="rackprog-list"></ul>
+    </div>
 
     <div id="scanner-wrap" class="scanner-wrap">
       <div id="reader"></div>

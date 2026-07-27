@@ -9,6 +9,7 @@
     items: "fi_items",
     sessions: "fi_sessions",
     scans: "fi_scans",
+    rackChecks: "fi_rackchecks",
     stores: "fi_stores",
     device: "fi_device",
     sbUrl: "fi_sb_url",
@@ -107,6 +108,22 @@
       if (rec.qty <= 0) { delete bag[key]; removed = true; }
       writeJSON(LS.scans, all); emit();
       return { qty: removed ? 0 : rec.qty, removed };
+    },
+    // ラック確認ステータス（複数人の二重チェック防止）
+    async getRackChecks(sessionId) {
+      const all = readJSON(LS.rackChecks, {});
+      return all[sessionId] || {};
+    },
+    async setRackCheck(sessionId, rack, patch) {
+      const all = readJSON(LS.rackChecks, {});
+      const bag = all[sessionId] || (all[sessionId] = {});
+      bag[rack] = { session_id: sessionId, rack, ...(bag[rack] || {}), ...patch, updated_at: now() };
+      writeJSON(LS.rackChecks, all); emit();
+      return bag[rack];
+    },
+    async removeRackCheck(sessionId, rack) {
+      const all = readJSON(LS.rackChecks, {});
+      if (all[sessionId]) { delete all[sessionId][rack]; writeJSON(LS.rackChecks, all); emit(); }
     },
     async getStores() {
       return readJSON(LS.stores, []).slice().sort((a, b) => (a.brand || "").localeCompare(b.brand || "", "ja") || (a.name || "").localeCompare(b.name || "", "ja"));
@@ -209,6 +226,21 @@
       if (e3) throw e3;
       return { qty: 0, removed: true };
     },
+    // ラック確認ステータス（複数人の二重チェック防止）
+    async getRackChecks(sessionId) {
+      const { data, error } = await sb.from("rack_checks").select("*").eq("session_id", sessionId);
+      if (error) throw error;
+      const m = {}; (data || []).forEach((r) => (m[r.rack] = r)); return m;
+    },
+    async setRackCheck(sessionId, rack, patch) {
+      const row = { session_id: sessionId, rack, ...patch, updated_at: now() };
+      const { data, error } = await sb.from("rack_checks").upsert(row, { onConflict: "session_id,rack" }).select().single();
+      if (error) throw error; return data;
+    },
+    async removeRackCheck(sessionId, rack) {
+      const { error } = await sb.from("rack_checks").delete().eq("session_id", sessionId).eq("rack", rack);
+      if (error) throw error;
+    },
     async getStores() {
       const { data, error } = await sb.from("stores").select("*").order("brand").order("name");
       if (error) throw error; return data || [];
@@ -268,6 +300,7 @@
       if (this._channel) { try { sb.removeChannel(this._channel); } catch {} this._channel = null; }
       this._channel = sb.channel("fi_changes")
         .on("postgres_changes", { event: "*", schema: "public", table: "scans" }, emit)
+        .on("postgres_changes", { event: "*", schema: "public", table: "rack_checks" }, emit)
         .on("postgres_changes", { event: "*", schema: "public", table: "items" }, emit)
         .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, emit)
         .on("postgres_changes", { event: "*", schema: "public", table: "stores" }, emit)
@@ -311,6 +344,9 @@
     addScan(sid, sku, dev, loc, qty) { return this.impl.addScan(sid, sku, dev, loc, qty); },
     removeScan(sid, sku, loc) { return this.impl.removeScan(sid, sku, loc); },
     adjustScan(sid, sku, loc, delta) { return this.impl.adjustScan(sid, sku, loc, delta); },
+    getRackChecks(sid) { return this.impl.getRackChecks(sid); },
+    setRackCheck(sid, rack, patch) { return this.impl.setRackCheck(sid, rack, patch); },
+    removeRackCheck(sid, rack) { return this.impl.removeRackCheck(sid, rack); },
 
     // 店舗マスタ
     getStores() { return this.impl.getStores(); },
