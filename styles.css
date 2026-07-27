@@ -56,6 +56,17 @@ select { appearance: none; }
   border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 15px;
 }
 
+/* ラック選択（店内のみ） */
+.rack-row { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.rack-label {
+  font-size: 13px; font-weight: 700; color: #7cc0ff; white-space: nowrap;
+  background: #10283f; border: 1px solid #244a6e; border-radius: 8px; padding: 8px 10px;
+}
+.rack-input {
+  flex: 1; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 16px;
+}
+
 /* 直前取消ボタン */
 .undo-last {
   width: 100%; margin: 0 0 12px; background: var(--surface-2); color: #f4c66a;

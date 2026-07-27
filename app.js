@@ -11,8 +11,24 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const LOCATIONS = ["店内在庫", "バックヤード在庫", "その他倉庫"];
+  const RACK_SEP = "｜"; // location に「店内在庫｜<ラック名>」の形でラックを含める（スキーマ変更なし）
+  const RACK_BASE = "店内在庫"; // ラック選択の対象は店内のみ
+  const baseLocation = (loc) => String(loc || "").split(RACK_SEP)[0];
+  const rackOf = (loc) => { const p = String(loc || "").split(RACK_SEP); return p.length > 1 ? p.slice(1).join(RACK_SEP) : ""; };
+  // 表示用の短いラベル
+  function locLabel(loc) {
+    const base = baseLocation(loc), rack = rackOf(loc);
+    const short = base === "店内在庫" ? "店内" : base === "バックヤード在庫" ? "BY" : base;
+    return rack ? `${short}・${rack}` : short;
+  }
+  // 実際に記録するロケーション（店内でラック指定があれば付与）
+  function effectiveLocation() {
+    if (state.location === RACK_BASE && state.rack.trim()) return RACK_BASE + RACK_SEP + state.rack.trim();
+    return state.location;
+  }
   const LS_ACTIVE = "fi_active_session";
   const LS_LOC = "fi_location";
+  const LS_RACK = "fi_rack";
 
   const state = {
     view: "scan",
@@ -24,6 +40,7 @@
     stores: [],
     allScans: [],
     location: localStorage.getItem(LS_LOC) || "店内在庫",
+    rack: localStorage.getItem(LS_RACK) || "",
     pickOpen: false,
     pendingSku: "",
     reportStore: "",
@@ -163,12 +180,28 @@
   /* === スキャン === */
   function sessionLabel(s) { return (s.store ? s.store + " / " : "") + s.name + (s.status === "closed" ? "（完了）" : ""); }
 
+  // 店内選択時だけラック入力欄を表示し、既出ラックを候補に出す
+  function renderRackRow() {
+    const row = $("#rack-row"); if (!row) return;
+    const show = state.location === RACK_BASE;
+    row.hidden = !show;
+    if (!show) return;
+    const input = $("#rack-input");
+    if (document.activeElement !== input) input.value = state.rack;
+    // このセッションで既に使われた店内ラックを候補に
+    const racks = Array.from(new Set(
+      state.scans.map((sc) => (baseLocation(sc.location) === RACK_BASE ? rackOf(sc.location) : "")).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, "ja"));
+    $("#rack-datalist").innerHTML = racks.map((r) => `<option value="${esc(r)}"></option>`).join("");
+  }
+
   function renderScan() {
     $("#session-select").innerHTML =
       state.sessions.map((s) => `<option value="${s.id}" ${s.id === state.activeSessionId ? "selected" : ""}>${esc(sessionLabel(s))}</option>`).join("")
       || `<option value="">セッションなし</option>`;
 
     $$(".loc-btn").forEach((b) => b.classList.toggle("active", b.dataset.loc === state.location));
+    renderRackRow();
 
     const totalQty = state.scans.reduce((a, s) => a + s.qty, 0);
     const kinds = new Set(state.scans.map((s) => s.sku)).size;
@@ -190,7 +223,7 @@
       const pill = it ? `<span class="pill pill-ok">一致</span>` : `<span class="pill pill-new">マスタ外</span>`;
       return `<li class="row" data-sku="${esc(sc.sku)}" data-loc="${esc(sc.location)}">
         <div class="row-main"><div class="row-name">${name} ${pill}</div>
-        <div class="row-sub"><span class="loc-tag">${esc(sc.location)}</span> ${esc(sc.sku)}${sc.device ? " · " + esc(sc.device) : ""}</div></div>
+        <div class="row-sub"><span class="loc-tag">${esc(locLabel(sc.location))}</span> ${esc(sc.sku)}${sc.device ? " · " + esc(sc.device) : ""}</div></div>
         <span class="row-qty">×${sc.qty}</span>
         <button class="scan-adj" data-action="minus" title="1点減らす" aria-label="1点減らす">−1</button>
         <button class="scan-del" data-action="del" title="この行を削除" aria-label="この行を削除">✕</button></li>`;
@@ -220,14 +253,15 @@
     const s = activeSession();
     if (!s) { toast("先に棚卸しセッションを作成してください"); showFeedback("bad", "セッション未選択", ""); return; }
     try {
-      const res = await DB.addScan(state.activeSessionId, sku, DB.getDeviceName(), state.location, n);
+      const loc = effectiveLocation();
+      const res = await DB.addScan(state.activeSessionId, sku, DB.getDeviceName(), loc, n);
       const it = res.item;
-      const locTag = state.location;
+      const locTag = locLabel(loc);
       const plus = n > 1 ? ` +${n}` : "";
       if (res.status === "matched") { beep("ok"); flashScan("ok", `✓ ＋${n}　${it && it.name ? it.name : "一致"}`); showFeedback("ok", (it && it.name ? it.name : "一致") + " / " + locTag + plus, sku); pulseTotal(); }
       else if (res.status === "new") { beep("ok"); flashScan("new", `✓ ＋${n}　マスタ外（新規）`); showFeedback("new", "マスタ外（新規） / " + locTag + plus, sku); pulseTotal(); }
       else { beep("dup"); flashScan("dup", `＋${n} → 合計 ×${res.qty}　${it && it.name ? it.name : ""}`); showFeedback("dup", `${locTag} ×${res.qty}` + (it && it.name ? " · " + it.name : ""), sku); pulseTotal(); }
-      state.lastScan = { sku, location: locTag, qty: n };
+      state.lastScan = { sku, location: loc, qty: n };
       showUndoLast(it && it.name ? it.name : (state.itemMap[sku] ? "" : "マスタ外"), n);
       state.scans = await DB.getScans(state.activeSessionId);
       renderScan();
@@ -256,7 +290,7 @@
     const it = state.itemMap[sku];
     state.pendingSku = sku;
     $("#qty-title").textContent = it ? (it.name || it.category || "数量を入力") : "数量を入力";
-    $("#qty-sub").textContent = `${sku} / ${state.location}`;
+    $("#qty-sub").textContent = `${sku} / ${locLabel(effectiveLocation())}`;
     $("#qty-value").value = "1";
     $("#qty-modal").hidden = false;
     setTimeout(() => { const v = $("#qty-value"); v.focus(); v.select(); }, 50);
@@ -368,7 +402,7 @@
 
     // ① ロケーション内訳
     const locSum = {}; LOCATIONS.forEach((l) => (locSum[l] = 0));
-    scans.forEach((sc) => { locSum[sc.location] = (locSum[sc.location] || 0) + sc.qty; });
+    scans.forEach((sc) => { const b = baseLocation(sc.location); locSum[b] = (locSum[b] || 0) + sc.qty; });
 
     // ② カテゴリ比率
     const catSum = {};
@@ -600,13 +634,13 @@
     // レポート表示中の範囲を出力（店舗選択中はその店舗、一覧なら全店舗）
     let scans = state.allScans;
     if (state.reportStore) scans = scans.filter((sc) => storeKey(sc.store) === state.reportStore);
-    const rows = [["店舗", "ロケーション", "コード", "商品名", "カテゴリ", "単価", "数量"]];
+    const rows = [["店舗", "ロケーション", "ラック", "コード", "商品名", "カテゴリ", "単価", "数量"]];
     const sorted = [...scans].sort((a, b) =>
       storeKey(a.store).localeCompare(storeKey(b.store), "ja") ||
       (a.location || "").localeCompare(b.location || "") || (b.qty - a.qty));
     sorted.forEach((sc) => {
       const it = state.itemMap[sc.sku] || {};
-      rows.push([storeKey(sc.store), sc.location, sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty]);
+      rows.push([storeKey(sc.store), baseLocation(sc.location), rackOf(sc.location), sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty]);
     });
     const safe = (state.reportStore || "全店舗").replace(/[^\w\-一-龠ぁ-んァ-ヶー]/g, "_");
     download("tanaoroshi_" + safe + ".csv", toCSV(rows));
@@ -633,8 +667,18 @@
     $$(".loc-btn").forEach((b) => b.addEventListener("click", () => {
       state.location = b.dataset.loc; localStorage.setItem(LS_LOC, state.location);
       $$(".loc-btn").forEach((x) => x.classList.toggle("active", x === b));
-      toast("ロケーション: " + state.location);
+      renderRackRow();
+      toast("ロケーション: " + (state.location === RACK_BASE && state.rack ? "店内・" + state.rack : state.location));
     }));
+
+    // ラック入力（店内のみ）。値は端末に保持。
+    const rackInput = $("#rack-input");
+    if (rackInput) {
+      rackInput.value = state.rack;
+      const saveRack = (e) => { state.rack = e.target.value; localStorage.setItem(LS_RACK, state.rack); };
+      rackInput.addEventListener("input", saveRack);
+      rackInput.addEventListener("change", (e) => { saveRack(e); renderRackRow(); });
+    }
 
     $("#cam-toggle").addEventListener("click", toggleCamera);
     $("#zoom-range").addEventListener("input", (e) => { Scanner.setZoom(parseFloat(e.target.value)); });
