@@ -32,6 +32,7 @@
 - **接続情報は `config.js` の window.APP_CONFIG に埋め込み済み** → 各端末はURLを開くだけで自動接続（スタッフはキー入力不要）。anonキーは公開前提でRLS保護。
 - スキーマは `supabase-schema.sql`。RLSは「anonキーを知る全員が読み書き可」の店舗内向け最小構成。
 - 現状クラウド: 商品278 / 店舗30 投入済み・クリーン（セッション0・読取0）。
+- **rack_checks テーブル追加（要SQL実行）**: 複数人での二重チェック防止のラック確認ステータス（仮登録→ダブルチェック完了）。`supabase-schema.sql` に定義済み・べき等なので**SQL Editorで再実行すれば追加**される。未実行だとアプリは「クラウド側の準備が必要」と表示（ローカルモードでは自動動作）。API: `DB.getRackChecks/setRackCheck/removeRackCheck`。リアルタイム購読済み。
 - **データ変更のやり方**: 店舗やマスタの追加/削除は、config.jsのURL+anonキーでSupabase REST(PostgREST)に直接投げれば可能（例: `DELETE /rest/v1/stores?name=eq.〇〇`）。構造変更(列追加等)はSQL EditorでSQL実行が必要＝ユーザーに依頼。
 
 ## デプロイ（重要な運用ルール）

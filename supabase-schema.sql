@@ -46,6 +46,20 @@ create table if not exists public.scans (
 
 create index if not exists scans_session_idx on public.scans (session_id);
 
+-- ラック確認ステータス（複数人での二重チェック防止。店内ラック単位）
+--   status: 'provisional'（仮登録=1回目完了） / 'checked'（ダブルチェック完了）
+create table if not exists public.rack_checks (
+  session_id uuid not null references public.sessions(id) on delete cascade,
+  rack       text not null,
+  status     text not null default 'provisional',
+  first_by   text not null default '',
+  first_at   timestamptz,
+  checked_by text not null default '',
+  checked_at timestamptz,
+  updated_at timestamptz not null default now(),
+  primary key (session_id, rack)
+);
+
 -- 読取加算（なければ挿入）。p_qtyだけ加算。読取後の行を返す。
 create or replace function public.add_scan(
   p_session uuid, p_sku text, p_device text default '', p_location text default '店内在庫', p_qty integer default 1
@@ -69,7 +83,7 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['items','stores','sessions','scans'] loop
+  foreach t in array array['items','stores','sessions','scans','rack_checks'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname='supabase_realtime' and schemaname='public' and tablename=t
@@ -82,10 +96,11 @@ end $$;
 -- ------------------------------------------------------------
 --  アクセス制御（RLS）: anonキーを持つ全員が読み書き可（店舗内運用向け最小構成）
 -- ------------------------------------------------------------
-alter table public.items    enable row level security;
-alter table public.stores   enable row level security;
-alter table public.sessions enable row level security;
-alter table public.scans    enable row level security;
+alter table public.items       enable row level security;
+alter table public.stores      enable row level security;
+alter table public.sessions    enable row level security;
+alter table public.scans       enable row level security;
+alter table public.rack_checks enable row level security;
 
 do $$
 begin
@@ -100,5 +115,8 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='scans' and policyname='scans_all') then
     create policy scans_all on public.scans for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='rack_checks' and policyname='rack_checks_all') then
+    create policy rack_checks_all on public.rack_checks for all using (true) with check (true);
   end if;
 end $$;

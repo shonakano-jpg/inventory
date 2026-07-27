@@ -45,6 +45,9 @@
     pendingSku: "",
     reportStore: "",
     lastScan: null, // 直前の読取（取消用）: { sku, location, qty }
+    rackChecks: {}, // { rack: {status, first_by, first_at, checked_by, checked_at} }
+    rackTableMissing: false,
+    rackProgOpen: false,
   };
 
   /* ---------- トースト ---------- */
@@ -151,6 +154,11 @@
       state.stores = await DB.getStores();
       state.scans = state.activeSessionId ? await DB.getScans(state.activeSessionId) : [];
       state.allScans = await DB.getAllScans();
+      // ラック確認ステータス（テーブル未作成なら静かに空扱い＋フラグ）
+      if (state.activeSessionId) {
+        try { state.rackChecks = await DB.getRackChecks(state.activeSessionId); state.rackTableMissing = false; }
+        catch (e2) { state.rackChecks = {}; state.rackTableMissing = true; console.warn("rack_checks 未作成の可能性:", e2.message || e2); }
+      } else { state.rackChecks = {}; }
     } catch (e) { console.error(e); toast("読込エラー: " + (e.message || e)); }
     finally { loading = false; }
     render();
@@ -185,14 +193,116 @@
     const row = $("#rack-row"); if (!row) return;
     const show = state.location === RACK_BASE;
     row.hidden = !show;
+    $("#rack-status").hidden = !show;
+    $("#rackprog-toggle").hidden = !show;
+    $("#rackprog-panel").hidden = !show || !state.rackProgOpen;
     if (!show) return;
     const input = $("#rack-input");
     if (document.activeElement !== input) input.value = state.rack;
-    // このセッションで既に使われた店内ラックを候補に
-    const racks = Array.from(new Set(
-      state.scans.map((sc) => (baseLocation(sc.location) === RACK_BASE ? rackOf(sc.location) : "")).filter(Boolean)
-    )).sort((a, b) => a.localeCompare(b, "ja"));
+    // このセッションで既に使われた/ステータス登録済みの店内ラックを候補に
+    const racks = rackNames();
     $("#rack-datalist").innerHTML = racks.map((r) => `<option value="${esc(r)}"></option>`).join("");
+    renderRackStatus();
+    if (state.rackProgOpen) renderRackProgress();
+  }
+
+  // このセッションで登場した店内ラック名（読取済み＋ステータス登録済み）
+  function rackNames() {
+    const set = new Set();
+    state.scans.forEach((sc) => { if (baseLocation(sc.location) === RACK_BASE) { const r = rackOf(sc.location); if (r) set.add(r); } });
+    Object.keys(state.rackChecks || {}).forEach((r) => set.add(r));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
+  }
+
+  const rackQty = (rack) => state.scans.reduce((a, sc) => a + (baseLocation(sc.location) === RACK_BASE && rackOf(sc.location) === rack ? sc.qty : 0), 0);
+  const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+  // 現在入力中ラックの確認ステータス＋操作ボタン
+  function renderRackStatus() {
+    const el = $("#rack-status"); if (!el) return;
+    if (state.rackTableMissing) {
+      el.className = "rack-status warn";
+      el.innerHTML = `⚠️ ラック確認機能はクラウド側の準備が必要です（設定→SQLを1回実行）。`;
+      return;
+    }
+    const rack = (state.rack || "").trim();
+    if (!rack) { el.className = "rack-status"; el.innerHTML = `<span class="rs-hint">ラック名を入れると、仮登録／ダブルチェックの操作ができます。</span>`; return; }
+    const c = state.rackChecks[rack];
+    const qty = rackQty(rack);
+    const status = c ? c.status : "none";
+    if (status === "checked") {
+      el.className = "rack-status done";
+      el.innerHTML = `<div class="rs-info">✅ <b>ダブルチェック完了</b>（${esc(c.checked_by || "?")} ${fmtTime(c.checked_at)}）<br>
+        <span class="rs-sub">仮登録: ${esc(c.first_by || "?")} ${fmtTime(c.first_at)} ・ ${qty}点</span></div>
+        <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>`;
+    } else if (status === "provisional") {
+      el.className = "rack-status prov";
+      el.innerHTML = `<div class="rs-info">🕒 <b>仮登録済み</b>（${esc(c.first_by || "?")} ${fmtTime(c.first_at)} ・ ${qty}点）<br>
+        <span class="rs-sub">別の人がダブルチェックしてください</span></div>
+        <button class="btn btn-primary rs-check" data-rack-action="check">ダブルチェック完了</button>
+        <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>`;
+    } else {
+      el.className = "rack-status none";
+      el.innerHTML = `<div class="rs-info">このラック「${esc(rack)}」：<b>未確認</b>（${qty}点）</div>
+        <button class="btn btn-primary rs-prov" data-rack-action="prov">仮登録（1回目完了）</button>`;
+    }
+  }
+
+  // ラック進捗一覧（他の人の状況が見える）
+  function renderRackProgress() {
+    const ul = $("#rackprog-list"); if (!ul) return;
+    const racks = rackNames();
+    if (!racks.length) { ul.innerHTML = `<li class="empty">まだラックがありません。店内でラック名を入れて読み取ると表示されます。</li>`; return; }
+    ul.innerHTML = racks.map((r) => {
+      const c = state.rackChecks[r];
+      const st = c ? c.status : "none";
+      const label = st === "checked" ? "✅ 完了" : st === "provisional" ? "🕒 仮登録" : "⬜ 未確認";
+      const who = st === "checked" ? `${esc(c.checked_by || "?")} ${fmtTime(c.checked_at)}` : st === "provisional" ? `${esc(c.first_by || "?")} ${fmtTime(c.first_at)}` : "";
+      return `<li class="row rackprog-item rp-${st}" data-rack-pick="${esc(r)}">
+        <div class="row-main"><div class="row-name">${esc(r)} <span class="rp-badge rp-badge-${st}">${label}</span></div>
+        <div class="row-sub">${rackQty(r)}点${who ? " ・ " + who : ""}</div></div>
+        <span class="chev">›</span></li>`;
+    }).join("");
+  }
+
+  function requireStaff() {
+    const name = (DB.getDeviceName() || "").trim();
+    if (!name) { toast("先に担当者名を入力してください"); const s = $("#staff-name"); if (s) s.focus(); return null; }
+    return name;
+  }
+
+  async function markRackProvisional() {
+    const rack = (state.rack || "").trim(); if (!rack) { toast("ラック名を入れてください"); return; }
+    const who = requireStaff(); if (!who) return;
+    try {
+      await DB.setRackCheck(state.activeSessionId, rack, { status: "provisional", first_by: who, first_at: new Date().toISOString() });
+      haptic("ok"); toast(`「${rack}」を仮登録しました`);
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId); renderRackRow();
+    } catch (e) { toast("仮登録に失敗: " + (e.message || e)); }
+  }
+
+  async function markRackChecked() {
+    const rack = (state.rack || "").trim(); if (!rack) return;
+    const who = requireStaff(); if (!who) return;
+    const c = state.rackChecks[rack];
+    if (c && c.first_by && c.first_by === who) {
+      if (!confirm("仮登録と同じ担当者です。ダブルチェックは別の人が推奨です。このまま完了にしますか？")) return;
+    }
+    try {
+      await DB.setRackCheck(state.activeSessionId, rack, { status: "checked", checked_by: who, checked_at: new Date().toISOString() });
+      haptic("ok"); toast(`「${rack}」のダブルチェック完了`);
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId); renderRackRow();
+    } catch (e) { toast("完了処理に失敗: " + (e.message || e)); }
+  }
+
+  async function resetRack() {
+    const rack = (state.rack || "").trim(); if (!rack) return;
+    if (!confirm(`「${rack}」の確認ステータスを取り消しますか？（点数は消えません）`)) return;
+    try {
+      await DB.removeRackCheck(state.activeSessionId, rack);
+      toast(`「${rack}」の確認ステータスを取消しました`);
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId); renderRackRow();
+    } catch (e) { toast("取消に失敗: " + (e.message || e)); }
   }
 
   function renderScan() {
@@ -676,9 +786,33 @@
     if (rackInput) {
       rackInput.value = state.rack;
       const saveRack = (e) => { state.rack = e.target.value; localStorage.setItem(LS_RACK, state.rack); };
-      rackInput.addEventListener("input", saveRack);
+      rackInput.addEventListener("input", (e) => { saveRack(e); renderRackStatus(); });
       rackInput.addEventListener("change", (e) => { saveRack(e); renderRackRow(); });
     }
+
+    // ラック確認ステータスの操作
+    $("#rack-status").addEventListener("click", (e) => {
+      const a = e.target.closest("[data-rack-action]"); if (!a) return;
+      const act = a.dataset.rackAction;
+      if (act === "prov") markRackProvisional();
+      else if (act === "check") markRackChecked();
+      else if (act === "reset") resetRack();
+    });
+
+    // ラック進捗パネルの開閉
+    $("#rackprog-toggle").addEventListener("click", () => {
+      state.rackProgOpen = !state.rackProgOpen;
+      $("#rackprog-panel").hidden = !state.rackProgOpen;
+      $("#rackprog-toggle").classList.toggle("open", state.rackProgOpen);
+      if (state.rackProgOpen) renderRackProgress();
+    });
+    // 進捗リストのラックをタップ → そのラックを選択
+    $("#rackprog-list").addEventListener("click", (e) => {
+      const li = e.target.closest("[data-rack-pick]"); if (!li) return;
+      state.rack = li.dataset.rackPick; localStorage.setItem(LS_RACK, state.rack);
+      const ri = $("#rack-input"); if (ri) ri.value = state.rack;
+      renderRackRow();
+    });
 
     $("#cam-toggle").addEventListener("click", toggleCamera);
     $("#zoom-range").addEventListener("input", (e) => { Scanner.setZoom(parseFloat(e.target.value)); });
