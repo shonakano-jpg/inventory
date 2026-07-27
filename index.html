@@ -37,6 +37,12 @@
       <button class="loc-btn" data-loc="その他倉庫">その他倉庫</button>
     </div>
 
+    <div id="rack-row" class="rack-row" hidden>
+      <label class="rack-label" for="rack-input">ラック</label>
+      <input id="rack-input" class="rack-input" list="rack-datalist" placeholder="棚卸し中のラック（例：A-1 / レジ横）" autocomplete="off" />
+      <datalist id="rack-datalist"></datalist>
+    </div>
+
     <div id="scanner-wrap" class="scanner-wrap">
       <div id="reader"></div>
       <div id="scan-overlay" class="scan-overlay"><div class="scan-frame"></div></div>

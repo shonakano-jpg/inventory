@@ -18,6 +18,7 @@
 - **stores**（店舗マスタ）: name(PK), brand, area。公式30店舗を `stores.json` に収録、初回自動投入。SELFURUGI 18 + NOTIME 12。
 - **sessions**（棚卸しセッション）: store（店舗名）+ name（棚卸日 YYYY-MM-DD）。画面表示は「店舗名 / 棚卸日」。
 - **scans**: (session_id, location, sku) 単位で qty 加算。location大分類 = `店内在庫 / バックヤード在庫 / その他倉庫`。担当者名は device 列に保存。
+  - **ラック**（店内のみ）は**スキーマ変更なし**で location 文字列に埋め込む＝`店内在庫｜<ラック名>`（区切りは全角縦棒 `｜`）。集計/レポートは先頭の大分類（`baseLocation()`）に丸めるので3分類表示は不変。CSVは「ロケーション」「ラック」列に分離出力。app.js の `RACK_SEP/baseLocation/rackOf/effectiveLocation` 参照。
 - 読取加算はRPC `add_scan(p_session, p_sku, p_device, p_location, p_qty)`。
 
 ## 主な機能
