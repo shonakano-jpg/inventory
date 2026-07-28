@@ -29,6 +29,9 @@ body { padding-bottom: calc(64px + var(--safe-b)); }
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
 }
 .topbar-title { font-weight: 700; font-size: 17px; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.manual-link { padding: 6px 10px; font-size: 13px; text-decoration: none; color: #7cc0ff; border: 1px solid #244a6e; border-radius: 10px; white-space: nowrap; }
+.manual-link:active { background: var(--surface-2); }
 .badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; font-weight: 600; }
 .badge-local { background: #3a2e12; color: var(--amber); }
 .badge-cloud { background: #10331f; color: var(--green); }
