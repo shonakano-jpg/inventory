@@ -340,6 +340,14 @@ textarea.search { resize: vertical; font-family: inherit; line-height: 1.6; }
 
 /* 比率バー */
 .chart-title { font-size: 14px; color: var(--muted); margin: 20px 0 8px; }
+
+/* 店舗詳細: 店舗名＋日付・タップ可能なロケーションカード */
+.report-sub { font-size: 15px; font-weight: 700; margin: 0 0 12px; line-height: 1.5; }
+.report-hint { font-size: 12px; color: var(--muted); margin: -6px 0 6px; }
+.rcard-loc, .rcard-total { cursor: pointer; user-select: none; transition: border-color .12s, background .12s; }
+.rcard-loc:active, .rcard-total:active { background: var(--surface-2); }
+.rcard.active { border-color: #3b82f6; box-shadow: inset 0 0 0 1px #3b82f6; }
+.rcard.active .l { color: #7cc0ff; }
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar-row { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 10px; }
 .bar-label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
