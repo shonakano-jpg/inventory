@@ -44,6 +44,7 @@
     pickOpen: false,
     pendingSku: "",
     reportStore: "",
+    reportLoc: "", // 店舗詳細でのロケーション絞り込み（""=全体）
     lastScan: null, // 直前の読取（取消用）: { sku, location, qty }
     rackChecks: {}, // { rack: {status, first_by, first_at, checked_by, checked_at} }
     rackTableMissing: false,
@@ -504,12 +505,19 @@
     else { back.hidden = true; title.textContent = "店舗別レポート"; renderStoreOverview(body); }
   }
 
-  // 店舗一覧（各店舗の合計点数）
+  // 店舗一覧（各店舗の合計点数＋棚卸日）
   function renderStoreOverview(body) {
     const byStore = {};
     state.allScans.forEach((sc) => {
       const k = storeKey(sc.store);
       byStore[k] = (byStore[k] || 0) + sc.qty;
+    });
+    // 店舗ごとの棚卸日（セッション名）
+    const datesByStore = {};
+    state.sessions.forEach((s) => {
+      const k = storeKey(s.store);
+      if (!s.name) return;
+      (datesByStore[k] = datesByStore[k] || new Set()).add(s.name);
     });
     const rows = Object.entries(byStore).sort((a, b) => b[1] - a[1]);
     const grand = rows.reduce((a, r) => a + r[1], 0);
@@ -520,52 +528,73 @@
          <div class="rcard"><div class="n">${rows.length}</div><div class="l">店舗数</div></div>
        </div>
        <ul class="report-list">` +
-      rows.map(([store, qty]) => `
-        <li class="row store-row" data-store="${esc(store)}">
+      rows.map(([store, qty]) => {
+        const ds = datesByStore[store] ? Array.from(datesByStore[store]).sort().join(" / ") : "";
+        return `<li class="row store-row" data-store="${esc(store)}">
           <div class="row-main"><div class="row-name">${esc(store)}</div>
-          <div class="row-sub">タップで内訳・比率を表示</div></div>
-          <span class="row-qty">${jnum(qty)}</span><span class="chev">›</span></li>`).join("") +
+          <div class="row-sub">${ds ? "🗓 " + esc(ds) : "タップで内訳・比率を表示"}</div></div>
+          <span class="row-qty">${jnum(qty)}</span><span class="chev">›</span></li>`;
+      }).join("") +
       `</ul>`;
   }
 
-  // 店舗詳細（ロケーション内訳＋カテゴリ比率＋価格帯比率）
+  // 店舗詳細（店舗名＋日付・ロケーション内訳・タップで絞込・店内はラック別着数）
   function renderStoreDetail(title, body) {
     const store = state.reportStore;
     title.textContent = store;
-    const scans = state.allScans.filter((sc) => storeKey(sc.store) === store);
-    const total = scans.reduce((a, x) => a + x.qty, 0);
+    const storeScans = state.allScans.filter((sc) => storeKey(sc.store) === store);
+    const total = storeScans.reduce((a, x) => a + x.qty, 0);
 
-    // ① ロケーション内訳
+    // 棚卸日（この店舗のセッション名＝日付）
+    const dates = Array.from(new Set(
+      state.sessions.filter((s) => storeKey(s.store) === store).map((s) => s.name).filter(Boolean)
+    )).sort();
+
+    // ロケーション内訳（大分類）
     const locSum = {}; LOCATIONS.forEach((l) => (locSum[l] = 0));
-    scans.forEach((sc) => { const b = baseLocation(sc.location); locSum[b] = (locSum[b] || 0) + sc.qty; });
+    storeScans.forEach((sc) => { const b = baseLocation(sc.location); locSum[b] = (locSum[b] || 0) + sc.qty; });
 
-    // ② カテゴリ比率
-    const catSum = {};
+    // 絞り込み対象（""=全体）
+    const sel = state.reportLoc;
+    const scans = sel ? storeScans.filter((sc) => baseLocation(sc.location) === sel) : storeScans;
+    const secTotal = scans.reduce((a, x) => a + x.qty, 0);
+
+    // カテゴリ比率・価格帯比率（絞り込み後）
+    const catSum = {}, priceSum = {};
     scans.forEach((sc) => {
       const it = state.itemMap[sc.sku];
       const c = it ? (it.category || "未分類") : "マスタ外";
       catSum[c] = (catSum[c] || 0) + sc.qty;
-    });
-    // ③ 価格帯比率
-    const priceSum = {};
-    scans.forEach((sc) => {
-      const it = state.itemMap[sc.sku];
       const p = it && it.price != null && it.price !== "" ? "¥" + jnum(Number(it.price)) : "不明";
       priceSum[p] = (priceSum[p] || 0) + sc.qty;
     });
 
+    const totalCard = `<div class="rcard rcard-total${sel === "" ? " active" : ""}" data-rloc=""><div class="n">${jnum(total)}</div><div class="l">合計</div></div>`;
     const locCards = LOCATIONS.map((l) =>
-      `<div class="rcard"><div class="n">${jnum(locSum[l] || 0)}</div><div class="l">${l}</div></div>`).join("");
+      `<div class="rcard rcard-loc${sel === l ? " active" : ""}" data-rloc="${esc(l)}"><div class="n">${jnum(locSum[l] || 0)}</div><div class="l">${l}</div></div>`).join("");
 
+    // 店内選択時: ラック別 着数
+    let rackHtml = "";
+    if (sel === "店内在庫") {
+      const rackSum = {};
+      storeScans.forEach((sc) => {
+        if (baseLocation(sc.location) === "店内在庫") { const r = rackOf(sc.location) || "（ラック未設定）"; rackSum[r] = (rackSum[r] || 0) + sc.qty; }
+      });
+      const has = Object.values(rackSum).some((v) => v > 0);
+      rackHtml = `<h3 class="chart-title">ラック別 着数</h3>` +
+        (has ? barChart(rackSum, locSum["店内在庫"] || 0, "rack") : `<div class="empty">ラックのデータがありません（店内でラック名を入れて登録すると集計されます）。</div>`);
+    }
+
+    const heading = sel ? `${sel}の内訳` : "全体の内訳";
     body.innerHTML =
-      `<div class="report-cards report-cards-4">
-         <div class="rcard rcard-total"><div class="n">${jnum(total)}</div><div class="l">合計</div></div>
-         ${locCards}
-       </div>
-       <h3 class="chart-title">カテゴリ比率</h3>
-       ${barChart(catSum, total, "cat")}
-       <h3 class="chart-title">価格帯比率</h3>
-       ${barChart(priceSum, total, "price")}`;
+      `<div class="report-sub">🏬 ${esc(store)}　🗓 ${dates.length ? esc(dates.join(" / ")) : "（棚卸日なし）"}</div>
+       <div class="report-cards report-cards-4">${totalCard}${locCards}</div>
+       <div class="report-hint">↑ ロケーションをタップで内訳を切替${sel ? "（合計で全体に戻る）" : ""}</div>
+       ${rackHtml}
+       <h3 class="chart-title">${esc(heading)}・カテゴリ比率</h3>
+       ${barChart(catSum, secTotal, "cat")}
+       <h3 class="chart-title">${esc(heading)}・価格帯比率</h3>
+       ${barChart(priceSum, secTotal, "price")}`;
   }
 
   // 横棒＋割合の簡易チャート
@@ -906,10 +935,12 @@
     $("#csv-export-btn").addEventListener("click", exportMasterCSV);
 
     $("#report-export-btn").addEventListener("click", exportReportCSV);
-    $("#report-back").addEventListener("click", () => { state.reportStore = ""; renderReport(); });
+    $("#report-back").addEventListener("click", () => { state.reportStore = ""; state.reportLoc = ""; renderReport(); });
     $("#report-body").addEventListener("click", (e) => {
+      const locEl = e.target.closest("[data-rloc]");
+      if (locEl) { const l = locEl.dataset.rloc; state.reportLoc = (state.reportLoc === l) ? "" : l; renderReport(); return; }
       const li = e.target.closest("[data-store]"); if (!li) return;
-      state.reportStore = li.dataset.store; renderReport();
+      state.reportStore = li.dataset.store; state.reportLoc = ""; renderReport();
     });
 
     // セッションモーダル
