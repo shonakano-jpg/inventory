@@ -1110,6 +1110,7 @@
 
   /* ---------- 起動 ---------- */
   async function main() {
+    DB.setDeviceName(""); // 担当者名はリロードごとに空欄にする（毎回入力してもらう）
     wire();
     await DB.init();
     renderBadge();
