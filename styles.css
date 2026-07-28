@@ -67,6 +67,17 @@ select { appearance: none; }
   border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 16px;
 }
 
+/* 手入力モーダル */
+.mm-sub { margin-bottom: 8px; }
+.mm-field { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+#mm-category, #mm-price {
+  width: 100%; margin-top: 4px; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 16px;
+}
+.mm-hint { min-height: 20px; font-size: 13px; margin: 8px 0; font-family: ui-monospace, monospace; }
+.mm-hint.ok { color: var(--muted); }
+.mm-hint.warn { color: #f4c66a; font-family: inherit; }
+
 /* ラック確認ステータス */
 .rack-status {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
