@@ -67,6 +67,23 @@ select { appearance: none; }
   border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 16px;
 }
 
+/* 確定ワークフロー */
+.session-status { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; margin-left: 6px; }
+.session-status.st-prov { background: #3a2e12; color: #f4c66a; }
+.session-status.st-final { background: #10331f; color: #7ee2a8; }
+.locked-banner {
+  background: #10331f; border: 1px solid #1f5a37; color: #7ee2a8;
+  border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 600; margin: 0 0 10px;
+}
+.recent-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 18px 0 8px; }
+.recent-head .list-title { margin: 0; }
+.recent-actions { display: flex; gap: 8px; }
+.btn.sm { padding: 7px 12px; font-size: 13px; }
+.reset-btn { color: #f39a9a; border-color: #5a2626; }
+.btn:disabled { opacity: .45; pointer-events: none; }
+.report-finalize { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; flex-wrap: wrap; }
+.fin-badge { font-size: 13px; font-weight: 700; color: #7ee2a8; background: #10331f; border: 1px solid #1f5a37; border-radius: 8px; padding: 6px 10px; }
+
 /* 手入力モーダル */
 .mm-sub { margin-bottom: 8px; }
 .mm-field { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }

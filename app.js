@@ -167,6 +167,12 @@
   }
 
   function activeSession() { return state.sessions.find((s) => s.id === state.activeSessionId) || null; }
+  // セッション状態: open（作業中）/ provisional（仮確定）/ final（本確定=変更不可）。'closed'も変更不可扱い。
+  function sessionLocked(s) { const st = (s || activeSession()); const v = st && st.status; return v === "final" || v === "closed"; }
+  function ensureEditable() {
+    if (sessionLocked()) { toast("本確定済みのため変更できません（レポートで解除できます）"); return false; }
+    return true;
+  }
   function setActiveSession(id, doReload = true) {
     state.activeSessionId = id; localStorage.setItem(LS_ACTIVE, id);
     hideUndoLast(); // セッションを切り替えたら直前取消は無効化
@@ -274,6 +280,7 @@
   }
 
   async function markRackProvisional() {
+    if (!ensureEditable()) return;
     const rack = (state.rack || "").trim(); if (!rack) { toast("ラック名を入れてください"); return; }
     const who = requireStaff(); if (!who) return;
     try {
@@ -284,6 +291,7 @@
   }
 
   async function markRackChecked() {
+    if (!ensureEditable()) return;
     const rack = (state.rack || "").trim(); if (!rack) return;
     const who = requireStaff(); if (!who) return;
     const c = state.rackChecks[rack];
@@ -315,6 +323,19 @@
     $$(".loc-btn").forEach((b) => b.classList.toggle("active", b.dataset.loc === state.location));
     renderRackRow();
 
+    // 確定ステータス（バッジ・ロック表示・操作可否）
+    const sess = activeSession();
+    const st = sess ? (sess.status || "open") : "open";
+    const locked = st === "final" || st === "closed";
+    const badge = $("#session-status");
+    if (locked) { badge.hidden = false; badge.textContent = "🔒 本確定"; badge.className = "session-status st-final"; }
+    else if (st === "provisional") { badge.hidden = false; badge.textContent = "仮確定"; badge.className = "session-status st-prov"; }
+    else { badge.hidden = true; }
+    $("#locked-banner").hidden = !locked;
+    [["#cam-toggle", locked], ["#manual-open", locked], ["#recent-reset", locked], ["#session-provisional", locked || st === "provisional"]]
+      .forEach(([sel, dis]) => { const el = $(sel); if (el) el.disabled = !!dis; });
+    $("#session-provisional").textContent = st === "provisional" ? "仮確定済み" : "仮確定";
+
     const totalQty = state.scans.reduce((a, s) => a + s.qty, 0);
     const kinds = new Set(state.scans.map((s) => s.sku)).size;
     const unknown = new Set(state.scans.filter((s) => !state.itemMap[s.sku]).map((s) => s.sku)).size;
@@ -331,12 +352,14 @@
       const it = state.itemMap[sc.sku];
       const name = it ? esc(it.name || "(名称なし)") : "マスタ外の商品";
       const pill = it ? `<span class="pill pill-ok">一致</span>` : `<span class="pill pill-new">マスタ外</span>`;
+      const actions = locked ? "" :
+        `<button class="scan-adj" data-action="minus" title="1点減らす" aria-label="1点減らす">−1</button>
+        <button class="scan-del" data-action="del" title="この行を削除" aria-label="この行を削除">✕</button>`;
       return `<li class="row" data-sku="${esc(sc.sku)}" data-loc="${esc(sc.location)}">
         <div class="row-main"><div class="row-name">${name} ${pill}</div>
         <div class="row-sub"><span class="loc-tag">${esc(locLabel(sc.location))}</span> ${esc(sc.sku)}${sc.device ? " · " + esc(sc.device) : ""}</div></div>
         <span class="row-qty">×${sc.qty}</span>
-        <button class="scan-adj" data-action="minus" title="1点減らす" aria-label="1点減らす">−1</button>
-        <button class="scan-del" data-action="del" title="この行を削除" aria-label="この行を削除">✕</button></li>`;
+        ${actions}</li>`;
     }).join("");
   }
 
@@ -365,6 +388,7 @@
   }
   function openManualModal() {
     if (!activeSession()) { openSessionModal(); return; }
+    if (!ensureEditable()) return;
     const cats = manualCategories();
     if (!cats.length) { toast("先にマスタ（商品）を取り込んでください"); return; }
     $("#mm-category").innerHTML = cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
@@ -388,6 +412,7 @@
     const n = Math.max(1, parseInt(qty, 10) || 1);
     const s = activeSession();
     if (!s) { toast("先に棚卸しセッションを作成してください"); showFeedback("bad", "セッション未選択", ""); return; }
+    if (!ensureEditable()) { showFeedback("bad", "本確定済み（変更不可）", ""); return; }
     try {
       const loc = effectiveLocation();
       const res = await DB.addScan(state.activeSessionId, sku, DB.getDeviceName(), loc, n);
@@ -413,12 +438,60 @@
 
   async function undoLastScan() {
     const ls = state.lastScan; if (!ls) return;
+    if (!ensureEditable()) return;
     try {
       await DB.adjustScan(state.activeSessionId, ls.sku, ls.location, -ls.qty);
       hideUndoLast();
       state.scans = await DB.getScans(state.activeSessionId);
       renderScan(); pulseTotal(); haptic("dup"); toast("直前の読取を取り消しました");
     } catch (err) { toast("取消に失敗: " + (err.message || err)); }
+  }
+
+  /* ---------- 確定ワークフロー ---------- */
+  async function markSessionProvisional() {
+    const s = activeSession(); if (!s) { toast("先にセッションを作成してください"); return; }
+    if (sessionLocked(s)) { toast("本確定済みです"); return; }
+    try {
+      await DB.setSessionStatus(s.id, "provisional");
+      state.sessions = await DB.getSessions();
+      haptic("ok"); toast("仮確定にしました"); render();
+    } catch (e) { toast("仮確定に失敗: " + (e.message || e)); }
+  }
+
+  async function resetRecent() {
+    const s = activeSession(); if (!s) { toast("セッションがありません"); return; }
+    if (!ensureEditable()) return;
+    if (!state.scans.length) { toast("読取データがありません"); return; }
+    if (!confirm("この棚卸しの読取をすべて消去してリセットしますか？（元に戻せません）")) return;
+    try {
+      await DB.clearScans(s.id);
+      hideUndoLast();
+      state.scans = await DB.getScans(s.id);
+      renderScan(); toast("読取をリセットしました");
+    } catch (e) { toast("リセットに失敗: " + (e.message || e)); }
+  }
+
+  async function finalizeStore() {
+    const store = state.reportStore; if (!store) return;
+    const sess = state.sessions.filter((s) => storeKey(s.store) === store);
+    if (!sess.length) { toast("対象のセッションがありません"); return; }
+    if (!confirm(`「${store}」を本確定します。以後この店舗の棚卸しは変更できなくなります。よろしいですか？`)) return;
+    try {
+      for (const s of sess) await DB.setSessionStatus(s.id, "final");
+      state.sessions = await DB.getSessions();
+      toast("本確定しました（変更不可）"); renderReport();
+    } catch (e) { toast("本確定に失敗: " + (e.message || e)); }
+  }
+
+  async function unfinalizeStore() {
+    const store = state.reportStore; if (!store) return;
+    const sess = state.sessions.filter((s) => storeKey(s.store) === store);
+    if (!confirm(`「${store}」の本確定を解除して、編集できる状態に戻しますか？`)) return;
+    try {
+      for (const s of sess) await DB.setSessionStatus(s.id, "provisional");
+      state.sessions = await DB.getSessions();
+      toast("本確定を解除しました"); renderReport();
+    } catch (e) { toast("解除に失敗: " + (e.message || e)); }
   }
 
   /* ---------- 数量入力モーダル ---------- */
@@ -456,6 +529,7 @@
       btn.textContent = "カメラ開始"; torchBtn.hidden = true; zoomRow.hidden = true;
     } else {
       if (!activeSession()) { openSessionModal(); return; }
+      if (!ensureEditable()) return;
       unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
       try {
         btn.textContent = "起動中…";
@@ -585,9 +659,17 @@
         (has ? barChart(rackSum, locSum["店内在庫"] || 0, "rack") : `<div class="empty">ラックのデータがありません（店内でラック名を入れて登録すると集計されます）。</div>`);
     }
 
+    // 本確定（変更不可）状態
+    const storeSessions = state.sessions.filter((s) => storeKey(s.store) === store);
+    const allFinal = storeSessions.length > 0 && storeSessions.every((s) => s.status === "final" || s.status === "closed");
+    const finalizeHtml = allFinal
+      ? `<span class="fin-badge">🔒 本確定済み（変更不可）</span><button id="unfinalize-btn" class="btn btn-ghost sm">解除</button>`
+      : `<button id="finalize-btn" class="btn btn-primary">本確定（変更不可にする）</button>`;
+
     const heading = sel ? `${sel}の内訳` : "全体の内訳";
     body.innerHTML =
       `<div class="report-sub">🏬 ${esc(store)}　🗓 ${dates.length ? esc(dates.join(" / ")) : "（棚卸日なし）"}</div>
+       <div class="report-finalize">${finalizeHtml}</div>
        <div class="report-cards report-cards-4">${totalCard}${locCards}</div>
        <div class="report-hint">↑ ロケーションをタップで内訳を切替${sel ? "（合計で全体に戻る）" : ""}</div>
        ${rackHtml}
@@ -831,6 +913,8 @@
       });
     }
     $("#undo-last").addEventListener("click", undoLastScan);
+    $("#session-provisional").addEventListener("click", markSessionProvisional);
+    $("#recent-reset").addEventListener("click", resetRecent);
 
     $$(".loc-btn").forEach((b) => b.addEventListener("click", () => {
       state.location = b.dataset.loc; localStorage.setItem(LS_LOC, state.location);
@@ -895,6 +979,7 @@
       const li = e.target.closest("[data-sku]"); if (!li) return;
       const sku = li.dataset.sku, loc = li.dataset.loc;
       const act = e.target.closest("[data-action]") && e.target.closest("[data-action]").dataset.action;
+      if ((act === "minus" || act === "del") && !ensureEditable()) return;
       if (act === "minus") {
         try {
           await DB.adjustScan(state.activeSessionId, sku, loc, -1);
@@ -937,6 +1022,8 @@
     $("#report-export-btn").addEventListener("click", exportReportCSV);
     $("#report-back").addEventListener("click", () => { state.reportStore = ""; state.reportLoc = ""; renderReport(); });
     $("#report-body").addEventListener("click", (e) => {
+      if (e.target.id === "finalize-btn") { finalizeStore(); return; }
+      if (e.target.id === "unfinalize-btn") { unfinalizeStore(); return; }
       const locEl = e.target.closest("[data-rloc]");
       if (locEl) { const l = locEl.dataset.rloc; state.reportLoc = (state.reportLoc === l) ? "" : l; renderReport(); return; }
       const li = e.target.closest("[data-store]"); if (!li) return;

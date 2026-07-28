@@ -20,11 +20,13 @@
   <section id="view-scan" class="view active">
     <div class="session-bar">
       <div class="session-info">
-        <span class="session-label">棚卸しセッション（店舗）</span>
+        <span class="session-label">棚卸しセッション（店舗）<span id="session-status" class="session-status" hidden></span></span>
         <select id="session-select"></select>
       </div>
       <button id="new-session-btn" class="btn btn-ghost">＋新規</button>
     </div>
+
+    <div id="locked-banner" class="locked-banner" hidden>🔒 本確定済み（変更不可）。修正するにはレポートで「本確定を解除」してください。</div>
 
     <div class="staff-bar">
       <label class="staff-label" for="staff-name">担当者</label>
@@ -74,7 +76,13 @@
       <div class="stat"><div class="stat-num" id="stat-unknown">0</div><div class="stat-lbl">マスタ外</div></div>
     </div>
 
-    <h3 class="list-title">最近の読み取り</h3>
+    <div class="recent-head">
+      <h3 class="list-title">最近の読み取り</h3>
+      <div class="recent-actions">
+        <button id="session-provisional" class="btn btn-ghost sm">仮確定</button>
+        <button id="recent-reset" class="btn btn-ghost sm reset-btn">リセット</button>
+      </div>
+    </div>
     <ul id="recent-list" class="recent-list"></ul>
   </section>
 
