@@ -109,6 +109,10 @@
       writeJSON(LS.scans, all); emit();
       return { qty: removed ? 0 : rec.qty, removed };
     },
+    async clearScans(sessionId) {
+      const all = readJSON(LS.scans, {});
+      if (all[sessionId]) { delete all[sessionId]; writeJSON(LS.scans, all); emit(); }
+    },
     // ラック確認ステータス（複数人の二重チェック防止）
     async getRackChecks(sessionId) {
       const all = readJSON(LS.rackChecks, {});
@@ -225,6 +229,10 @@
       const { error: e3 } = await sb.from("scans").delete().eq("session_id", sessionId).eq("sku", sku).eq("location", loc);
       if (e3) throw e3;
       return { qty: 0, removed: true };
+    },
+    async clearScans(sessionId) {
+      const { error } = await sb.from("scans").delete().eq("session_id", sessionId);
+      if (error) throw error;
     },
     // ラック確認ステータス（複数人の二重チェック防止）
     async getRackChecks(sessionId) {
@@ -344,6 +352,7 @@
     addScan(sid, sku, dev, loc, qty) { return this.impl.addScan(sid, sku, dev, loc, qty); },
     removeScan(sid, sku, loc) { return this.impl.removeScan(sid, sku, loc); },
     adjustScan(sid, sku, loc, delta) { return this.impl.adjustScan(sid, sku, loc, delta); },
+    clearScans(sid) { return this.impl.clearScans(sid); },
     getRackChecks(sid) { return this.impl.getRackChecks(sid); },
     setRackCheck(sid, rack, patch) { return this.impl.setRackCheck(sid, rack, patch); },
     removeRackCheck(sid, rack) { return this.impl.removeRackCheck(sid, rack); },
