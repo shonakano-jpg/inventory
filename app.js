@@ -43,8 +43,8 @@
     rack: localStorage.getItem(LS_RACK) || "",
     pickOpen: false,
     pendingSku: "",
-    reportStore: "",
-    reportLoc: "", // 店舗詳細でのロケーション絞り込み（""=全体）
+    reportKey: null, // 選択中の店舗×日付グループ { store, date }（null=一覧）
+    reportLoc: "", // 詳細でのロケーション絞り込み（""=全体）
     lastScan: null, // 直前の読取（取消用）: { sku, location, qty }
     rackChecks: {}, // { rack: {status, first_by, first_at, checked_by, checked_at} }
     rackTableMissing: false,
@@ -484,10 +484,11 @@
   }
 
   async function finalizeStore() {
-    const store = state.reportStore; if (!store) return;
-    const sess = state.sessions.filter((s) => storeKey(s.store) === store);
+    if (!state.reportKey) return;
+    const { store, date } = state.reportKey;
+    const sess = reportGroupSessions();
     if (!sess.length) { toast("対象のセッションがありません"); return; }
-    if (!confirm(`「${store}」を本確定します。以後この店舗の棚卸しは変更できなくなります。よろしいですか？`)) return;
+    if (!confirm(`「${store} / ${date}」を本確定します。以後この棚卸しは変更できなくなります。よろしいですか？`)) return;
     try {
       for (const s of sess) await DB.setSessionStatus(s.id, "final");
       state.sessions = await DB.getSessions();
@@ -496,9 +497,10 @@
   }
 
   async function unfinalizeStore() {
-    const store = state.reportStore; if (!store) return;
-    const sess = state.sessions.filter((s) => storeKey(s.store) === store);
-    if (!confirm(`「${store}」の本確定を解除して、編集できる状態に戻しますか？`)) return;
+    if (!state.reportKey) return;
+    const { store, date } = state.reportKey;
+    const sess = reportGroupSessions();
+    if (!confirm(`「${store} / ${date}」の本確定を解除して、編集できる状態に戻しますか？`)) return;
     try {
       for (const s of sess) await DB.setSessionStatus(s.id, "provisional");
       state.sessions = await DB.getSessions();
@@ -585,64 +587,63 @@
   const jnum = (n) => n.toLocaleString("ja-JP");
   const storeKey = (st) => st || "（店舗未設定）";
 
-  function renderReport() {
-    const back = $("#report-back"), title = $("#report-title"), body = $("#report-body");
-    if (state.reportStore) { back.hidden = false; renderStoreDetail(title, body); }
-    else { back.hidden = true; title.textContent = "店舗別レポート"; renderStoreOverview(body); }
+  const sessionDateMap = () => { const m = {}; state.sessions.forEach((s) => (m[s.id] = s.name || "")); return m; };
+  const scanDate = (sc, dmap) => (dmap[sc.session_id] || "（日付不明）");
+  // 選択中グループ（店舗×日付）のセッション一覧
+  function reportGroupSessions() {
+    if (!state.reportKey) return [];
+    const { store, date } = state.reportKey;
+    return state.sessions.filter((s) => storeKey(s.store) === store && (s.name || "") === date);
   }
 
-  // 店舗一覧（各店舗の合計点数＋棚卸日）
-  function renderStoreOverview(body) {
-    const byStore = {};
+  function renderReport() {
+    const back = $("#report-back"), title = $("#report-title"), body = $("#report-body");
+    if (state.reportKey) { back.hidden = false; renderGroupDetail(title, body); }
+    else { back.hidden = true; title.textContent = "棚卸しレポート（店舗×日付）"; renderGroupOverview(body); }
+  }
+
+  // 一覧（店舗×日付ごとの合計点数）
+  function renderGroupOverview(body) {
+    const dmap = sessionDateMap();
+    const groups = {}; // key -> {store, date, qty}
     state.allScans.forEach((sc) => {
-      const k = storeKey(sc.store);
-      byStore[k] = (byStore[k] || 0) + sc.qty;
+      const store = storeKey(sc.store), date = scanDate(sc, dmap);
+      const key = store + " " + date;
+      (groups[key] = groups[key] || { store, date, qty: 0 }).qty += sc.qty;
     });
-    // 店舗ごとの棚卸日（セッション名）
-    const datesByStore = {};
-    state.sessions.forEach((s) => {
-      const k = storeKey(s.store);
-      if (!s.name) return;
-      (datesByStore[k] = datesByStore[k] || new Set()).add(s.name);
-    });
-    const rows = Object.entries(byStore).sort((a, b) => b[1] - a[1]);
-    const grand = rows.reduce((a, r) => a + r[1], 0);
+    const rows = Object.values(groups).sort((a, b) =>
+      a.store.localeCompare(b.store, "ja") || b.date.localeCompare(a.date));
+    const grand = rows.reduce((a, r) => a + r.qty, 0);
     if (!rows.length) { body.innerHTML = `<div class="empty">まだ読み取りデータがありません。</div>`; return; }
     body.innerHTML =
       `<div class="report-cards">
-         <div class="rcard"><div class="n">${jnum(grand)}</div><div class="l">全店 総点数</div></div>
-         <div class="rcard"><div class="n">${rows.length}</div><div class="l">店舗数</div></div>
+         <div class="rcard"><div class="n">${jnum(grand)}</div><div class="l">全体 総点数</div></div>
+         <div class="rcard"><div class="n">${rows.length}</div><div class="l">店舗×日付</div></div>
        </div>
        <ul class="report-list">` +
-      rows.map(([store, qty]) => {
-        const ds = datesByStore[store] ? Array.from(datesByStore[store]).sort().join(" / ") : "";
-        return `<li class="row store-row" data-store="${esc(store)}">
-          <div class="row-main"><div class="row-name">${esc(store)}</div>
-          <div class="row-sub">${ds ? "🗓 " + esc(ds) : "タップで内訳・比率を表示"}</div></div>
-          <span class="row-qty">${jnum(qty)}</span><span class="chev">›</span></li>`;
-      }).join("") +
+      rows.map((g) => `
+        <li class="row store-row" data-store="${esc(g.store)}" data-date="${esc(g.date)}">
+          <div class="row-main"><div class="row-name">${esc(g.store)}</div>
+          <div class="row-sub">🗓 ${esc(g.date)}</div></div>
+          <span class="row-qty">${jnum(g.qty)}</span><span class="chev">›</span></li>`).join("") +
       `</ul>`;
   }
 
-  // 店舗詳細（店舗名＋日付・ロケーション内訳・タップで絞込・店内はラック別着数）
-  function renderStoreDetail(title, body) {
-    const store = state.reportStore;
+  // 詳細（店舗×日付単位。ロケーション内訳・タップで絞込・店内はラック別着数）
+  function renderGroupDetail(title, body) {
+    const { store, date } = state.reportKey;
     title.textContent = store;
-    const storeScans = state.allScans.filter((sc) => storeKey(sc.store) === store);
-    const total = storeScans.reduce((a, x) => a + x.qty, 0);
-
-    // 棚卸日（この店舗のセッション名＝日付）
-    const dates = Array.from(new Set(
-      state.sessions.filter((s) => storeKey(s.store) === store).map((s) => s.name).filter(Boolean)
-    )).sort();
+    const dmap = sessionDateMap();
+    const groupScans = state.allScans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
+    const total = groupScans.reduce((a, x) => a + x.qty, 0);
 
     // ロケーション内訳（大分類）
     const locSum = {}; LOCATIONS.forEach((l) => (locSum[l] = 0));
-    storeScans.forEach((sc) => { const b = baseLocation(sc.location); locSum[b] = (locSum[b] || 0) + sc.qty; });
+    groupScans.forEach((sc) => { const b = baseLocation(sc.location); locSum[b] = (locSum[b] || 0) + sc.qty; });
 
     // 絞り込み対象（""=全体）
     const sel = state.reportLoc;
-    const scans = sel ? storeScans.filter((sc) => baseLocation(sc.location) === sel) : storeScans;
+    const scans = sel ? groupScans.filter((sc) => baseLocation(sc.location) === sel) : groupScans;
     const secTotal = scans.reduce((a, x) => a + x.qty, 0);
 
     // カテゴリ比率・価格帯比率（絞り込み後）
@@ -663,7 +664,7 @@
     let rackHtml = "";
     if (sel === "店内在庫") {
       const rackSum = {};
-      storeScans.forEach((sc) => {
+      groupScans.forEach((sc) => {
         if (baseLocation(sc.location) === "店内在庫") { const r = rackOf(sc.location) || "（ラック未設定）"; rackSum[r] = (rackSum[r] || 0) + sc.qty; }
       });
       const has = Object.values(rackSum).some((v) => v > 0);
@@ -671,16 +672,16 @@
         (has ? barChart(rackSum, locSum["店内在庫"] || 0, "rack") : `<div class="empty">ラックのデータがありません（店内でラック名を入れて登録すると集計されます）。</div>`);
     }
 
-    // 本確定（変更不可）状態
-    const storeSessions = state.sessions.filter((s) => storeKey(s.store) === store);
-    const allFinal = storeSessions.length > 0 && storeSessions.every((s) => s.status === "final" || s.status === "closed");
+    // 本確定（変更不可）状態：このグループのセッション
+    const groupSessions = reportGroupSessions();
+    const allFinal = groupSessions.length > 0 && groupSessions.every((s) => s.status === "final" || s.status === "closed");
     const finalizeHtml = allFinal
       ? `<span class="fin-badge">🔒 本確定済み（変更不可）</span><button id="unfinalize-btn" class="btn btn-ghost sm">解除</button>`
       : `<button id="finalize-btn" class="btn btn-primary">本確定（変更不可にする）</button>`;
 
     const heading = sel ? `${sel}の内訳` : "全体の内訳";
     body.innerHTML =
-      `<div class="report-sub">🏬 ${esc(store)}　🗓 ${dates.length ? esc(dates.join(" / ")) : "（棚卸日なし）"}</div>
+      `<div class="report-sub">🏬 ${esc(store)}　🗓 ${esc(date)}</div>
        <div class="report-finalize">${finalizeHtml}</div>
        <div class="report-cards report-cards-4">${totalCard}${locCards}</div>
        <div class="report-hint">↑ ロケーションをタップで内訳を切替${sel ? "（合計で全体に戻る）" : ""}</div>
@@ -893,18 +894,23 @@
     download("master.csv", toCSV(rows));
   }
   function exportReportCSV() {
-    // レポート表示中の範囲を出力（店舗選択中はその店舗、一覧なら全店舗）
+    // レポート表示中の範囲を出力（店舗×日付を選択中はその範囲、一覧なら全体）
+    const dmap = sessionDateMap();
     let scans = state.allScans;
-    if (state.reportStore) scans = scans.filter((sc) => storeKey(sc.store) === state.reportStore);
-    const rows = [["店舗", "ロケーション", "ラック", "コード", "商品名", "カテゴリ", "単価", "数量"]];
+    if (state.reportKey) {
+      const { store, date } = state.reportKey;
+      scans = scans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
+    }
+    const rows = [["店舗", "棚卸日", "ロケーション", "ラック", "コード", "商品名", "カテゴリ", "単価", "数量"]];
     const sorted = [...scans].sort((a, b) =>
       storeKey(a.store).localeCompare(storeKey(b.store), "ja") ||
+      scanDate(a, dmap).localeCompare(scanDate(b, dmap)) ||
       (a.location || "").localeCompare(b.location || "") || (b.qty - a.qty));
     sorted.forEach((sc) => {
       const it = state.itemMap[sc.sku] || {};
-      rows.push([storeKey(sc.store), baseLocation(sc.location), rackOf(sc.location), sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty]);
+      rows.push([storeKey(sc.store), scanDate(sc, dmap), baseLocation(sc.location), rackOf(sc.location), sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty]);
     });
-    const safe = (state.reportStore || "全店舗").replace(/[^\w\-一-龠ぁ-んァ-ヶー]/g, "_");
+    const safe = (state.reportKey ? state.reportKey.store + "_" + state.reportKey.date : "全体").replace(/[^\w\-一-龠ぁ-んァ-ヶー]/g, "_");
     download("tanaoroshi_" + safe + ".csv", toCSV(rows));
   }
 
@@ -1035,14 +1041,14 @@
     $("#csv-export-btn").addEventListener("click", exportMasterCSV);
 
     $("#report-export-btn").addEventListener("click", exportReportCSV);
-    $("#report-back").addEventListener("click", () => { state.reportStore = ""; state.reportLoc = ""; renderReport(); });
+    $("#report-back").addEventListener("click", () => { state.reportKey = null; state.reportLoc = ""; renderReport(); });
     $("#report-body").addEventListener("click", (e) => {
       if (e.target.id === "finalize-btn") { finalizeStore(); return; }
       if (e.target.id === "unfinalize-btn") { unfinalizeStore(); return; }
       const locEl = e.target.closest("[data-rloc]");
       if (locEl) { const l = locEl.dataset.rloc; state.reportLoc = (state.reportLoc === l) ? "" : l; renderReport(); return; }
       const li = e.target.closest("[data-store]"); if (!li) return;
-      state.reportStore = li.dataset.store; state.reportLoc = ""; renderReport();
+      state.reportKey = { store: li.dataset.store, date: li.dataset.date }; state.reportLoc = ""; renderReport();
     });
 
     // セッションモーダル
