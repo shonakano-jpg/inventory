@@ -66,18 +66,7 @@
 
     <button id="undo-last" class="btn btn-wide undo-last" hidden>↩ 直前の読取を取り消す</button>
 
-    <form id="manual-form" class="manual-form">
-      <input id="manual-input" inputmode="text" autocomplete="off"
-             placeholder="バーコードを手入力 / 外付けスキャナ" />
-      <input id="manual-qty" class="qty-input" inputmode="numeric" value="1" aria-label="数量" title="数量" />
-      <button class="btn btn-secondary" type="submit">登録</button>
-    </form>
-
-    <button id="pick-toggle" class="btn btn-ghost btn-wide">🏷 バーコードが無い在庫を選んで数量入力</button>
-    <div id="pick-panel" class="pick-panel" hidden>
-      <input id="pick-search" class="search" placeholder="カテゴリ・価格で検索（例：デニム 1980）" />
-      <ul id="pick-list" class="pick-list"></ul>
-    </div>
+    <button id="manual-open" class="btn btn-secondary btn-wide">✍️ 手入力（カテゴリ・価格・着数）</button>
 
     <div class="progress-row">
       <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">総点数</div></div>
@@ -216,6 +205,36 @@
 </div>
 
 <!-- 商品編集モーダル -->
+<div id="manual-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>手入力（バーコードなし）</h3>
+    <div class="mm-sub muted" id="mm-sub"></div>
+    <label class="mm-field">カテゴリ
+      <select id="mm-category"></select>
+    </label>
+    <label class="mm-field">価格
+      <select id="mm-price"></select>
+    </label>
+    <label class="mm-field">着数（点数）</label>
+    <div class="qty-stepper">
+      <button id="mm-minus" type="button" class="btn btn-ghost qty-step">－</button>
+      <input id="mm-qty" inputmode="numeric" value="1" />
+      <button id="mm-plus" type="button" class="btn btn-ghost qty-step">＋</button>
+    </div>
+    <div class="qty-quick">
+      <button type="button" data-q="5">+5</button>
+      <button type="button" data-q="10">+10</button>
+      <button type="button" data-q="20">+20</button>
+      <button type="button" data-q="50">+50</button>
+    </div>
+    <div id="mm-hint" class="mm-hint"></div>
+    <div class="btn-row">
+      <button id="mm-add" class="btn btn-primary btn-lg">登録</button>
+      <button id="mm-cancel" class="btn btn-ghost">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <div id="item-modal" class="modal" hidden>
   <div class="modal-card">
     <h3 id="item-modal-title">商品を追加</h3>

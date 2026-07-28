@@ -140,6 +140,7 @@
     $$(".view").forEach((el) => el.classList.toggle("active", el.id === "view-" + v));
     $$(".tab").forEach((el) => el.classList.toggle("active", el.dataset.view === v));
     render();
+    if (v === "report") reload(); // レポートは常に最新の全店データを取り直す
   }
 
   /* ---------- データ再取得 ---------- */
@@ -320,8 +321,6 @@
     $("#stat-kinds").textContent = kinds;
     $("#stat-unknown").textContent = unknown;
 
-    if (state.pickOpen) renderPickList();
-
     const list = $("#recent-list");
     if (!state.scans.length) {
       list.innerHTML = `<li class="empty">まだ読み取りがありません。<br>上でロケーションを選び「カメラ開始」。</li>`;
@@ -340,20 +339,46 @@
     }).join("");
   }
 
-  const normSearch = (s) => String(s || "").toLowerCase().replace(/[\s¥￥,、]/g, "");
-  function renderPickList() {
-    const q = normSearch($("#pick-search").value);
-    const rows = state.items.filter((it) => {
-      if (!q) return true;
-      const hay = normSearch((it.name || "") + (it.category || "") + (it.sku || "") + (it.price ?? ""));
-      return hay.includes(q);
-    }).slice(0, 80);
-    const ul = $("#pick-list");
-    ul.innerHTML = rows.map((it) => `
-      <li class="pick-row" data-pick="${esc(it.sku)}">
-        <div class="pk-main"><div class="pk-name">${esc(it.name || it.category || "(名称なし)")}</div>
-        <div class="pk-sub">${esc(it.sku)}</div></div><div class="pk-add">＋</div></li>`).join("")
-      || `<li class="empty">該当なし</li>`;
+  /* ---------- 手入力モーダル（カテゴリ×価格×着数） ---------- */
+  const manualCategories = () =>
+    Array.from(new Set(state.items.map((it) => it.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ja"));
+  const pricesForCategory = (cat) =>
+    Array.from(new Set(state.items.filter((it) => it.category === cat && it.price != null && it.price !== "").map((it) => Number(it.price)))).sort((a, b) => a - b);
+  function resolveManualSku() {
+    const cat = $("#mm-category").value, price = $("#mm-price").value;
+    const it = state.items.find((x) => x.category === cat && String(x.price) === String(price));
+    return it ? it.sku : null;
+  }
+  function updateManualHint() {
+    const el = $("#mm-hint");
+    if (!$("#mm-category").value) { el.textContent = ""; el.className = "mm-hint"; return; }
+    const sku = resolveManualSku();
+    el.textContent = sku ? `コード: ${sku}` : "⚠️ この組み合わせの商品がマスタにありません";
+    el.className = "mm-hint" + (sku ? " ok" : " warn");
+  }
+  function fillManualPrices() {
+    const prices = pricesForCategory($("#mm-category").value);
+    $("#mm-price").innerHTML = prices.map((p) => `<option value="${p}">¥${p.toLocaleString("ja-JP")}</option>`).join("")
+      || `<option value="">（価格なし）</option>`;
+    updateManualHint();
+  }
+  function openManualModal() {
+    if (!activeSession()) { openSessionModal(); return; }
+    const cats = manualCategories();
+    if (!cats.length) { toast("先にマスタ（商品）を取り込んでください"); return; }
+    $("#mm-category").innerHTML = cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    fillManualPrices();
+    $("#mm-qty").value = "1";
+    $("#mm-sub").textContent = "登録先: " + locLabel(effectiveLocation());
+    $("#manual-modal").hidden = false;
+  }
+  function closeManualModal() { $("#manual-modal").hidden = true; }
+  async function addManual() {
+    const sku = resolveManualSku();
+    if (!sku) { toast("該当する商品がマスタにありません"); return; }
+    const qty = Math.max(1, parseInt($("#mm-qty").value, 10) || 1);
+    closeManualModal();
+    await handleScan(sku, qty);
   }
 
   async function handleScan(rawText, qty) {
@@ -614,8 +639,9 @@
     const m = $("#session-modal");
     const stores = knownStores();
     $("#store-datalist").innerHTML = stores.map((s) => `<option value="${esc(s)}">`).join("");
-    const lastStore = stores[0] || "";
-    $("#sm-store").value = lastStore;
+    // 既定は「今開いているセッションの店舗」。無ければ空（先頭店舗を勝手に入れない＝取り違え防止）。
+    const cur = activeSession();
+    $("#sm-store").value = cur ? (cur.store || "") : "";
     $("#sm-name").value = new Date().toISOString().slice(0, 10); // 棚卸日（既定＝本日）
     $("#sm-close-session").style.display = activeSession() ? "" : "none";
     m.hidden = false;
@@ -625,6 +651,9 @@
   async function createSessionFromModal() {
     const store = $("#sm-store").value.trim();
     const name = $("#sm-name").value.trim() || new Date().toISOString().slice(0, 10);
+    if (!store && !confirm("店舗が未選択です。このまま作成しますか？（レポートでは「店舗未設定」に集計されます）")) {
+      $("#sm-store").focus(); return;
+    }
     if (store && !state.stores.some((s) => s.name === store)) {
       await DB.upsertStore({ name: store, brand: "", area: "" });
       state.stores = await DB.getStores();
@@ -820,10 +849,19 @@
       this._on = !this._on; await Scanner.toggleTorch(this._on);
       this.classList.toggle("btn-primary", this._on);
     });
-    $("#manual-form").addEventListener("submit", (e) => {
-      e.preventDefault(); const inp = $("#manual-input"); const qi = $("#manual-qty");
-      handleScan(inp.value, qi.value); inp.value = ""; qi.value = "1"; inp.focus();
-    });
+    // 手入力モーダル
+    $("#manual-open").addEventListener("click", openManualModal);
+    $("#mm-category").addEventListener("change", fillManualPrices);
+    $("#mm-price").addEventListener("change", updateManualHint);
+    $("#mm-minus").addEventListener("click", () => { const v = $("#mm-qty"); v.value = Math.max(1, (parseInt(v.value, 10) || 1) - 1); });
+    $("#mm-plus").addEventListener("click", () => { const v = $("#mm-qty"); v.value = (parseInt(v.value, 10) || 0) + 1; });
+    $$("#manual-modal .qty-quick button").forEach((b) => b.addEventListener("click", () => {
+      const v = $("#mm-qty"); v.value = (parseInt(v.value, 10) || 0) + (parseInt(b.dataset.q, 10) || 0);
+    }));
+    $("#mm-add").addEventListener("click", addManual);
+    $("#mm-cancel").addEventListener("click", closeManualModal);
+    $("#manual-modal").addEventListener("click", (e) => { if (e.target.id === "manual-modal") closeManualModal(); });
+
     $("#recent-list").addEventListener("click", async (e) => {
       const li = e.target.closest("[data-sku]"); if (!li) return;
       const sku = li.dataset.sku, loc = li.dataset.loc;
@@ -847,19 +885,6 @@
       }
       // 行本体タップ: マスタ外なら商品登録モーダル
       if (!state.itemMap[sku]) openItemModal(sku);
-    });
-
-    // マスタ選択（バーコード無し）
-    $("#pick-toggle").addEventListener("click", () => {
-      if (!activeSession()) { openSessionModal(); return; }
-      state.pickOpen = !state.pickOpen;
-      $("#pick-panel").hidden = !state.pickOpen;
-      if (state.pickOpen) { renderPickList(); $("#pick-search").focus(); }
-    });
-    $("#pick-search").addEventListener("input", renderPickList);
-    $("#pick-list").addEventListener("click", (e) => {
-      const li = e.target.closest("[data-pick]"); if (!li) return;
-      openQtyModal(li.dataset.pick); // 数量を入力して登録
     });
 
     // 数量モーダル
