@@ -110,6 +110,16 @@ select { appearance: none; }
 .rack-status.warn { background: #3a2410; border-color: #6e4a24; color: #f4c66a; font-size: 13px; }
 .rack-status .btn { padding: 10px 12px; font-weight: 700; }
 .rack-status .rs-reset { flex: none; }
+.rs-verify { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.rs-q { font-size: 14px; line-height: 1.5; }
+.rs-q .rs-qty { color: #f4c66a; font-size: 16px; }
+.rs-checker {
+  width: 100%; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font-size: 16px;
+}
+.rs-verify-btns { display: flex; gap: 8px; }
+.rs-verify-btns .btn { flex: 1; }
+.rs-verify-btns .rs-reset { flex: 0 0 auto; }
 
 /* ラック進捗 */
 .rackprog-toggle { width: 100%; margin: 0 0 8px; }
