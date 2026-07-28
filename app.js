@@ -224,10 +224,13 @@
 
   const rackQty = (rack) => state.scans.reduce((a, sc) => a + (baseLocation(sc.location) === RACK_BASE && rackOf(sc.location) === rack ? sc.qty : 0), 0);
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  let rackCheckerDraft = ""; // ダブルチェック担当者の入力中テキスト（再描画で消えないよう保持）
 
   // 現在入力中ラックの確認ステータス＋操作ボタン
   function renderRackStatus() {
     const el = $("#rack-status"); if (!el) return;
+    // ダブルチェック担当者を入力中は再描画しない（入力が消えないように）
+    if (document.activeElement && document.activeElement.id === "rs-checker") return;
     if (state.rackTableMissing) {
       el.className = "rack-status warn";
       el.innerHTML = `⚠️ ラック確認機能はクラウド側の準備が必要です（設定→SQLを1回実行）。`;
@@ -245,10 +248,16 @@
         <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>`;
     } else if (status === "provisional") {
       el.className = "rack-status prov";
-      el.innerHTML = `<div class="rs-info">🕒 <b>仮登録済み</b>（${esc(c.first_by || "?")} ${fmtTime(c.first_at)} ・ ${qty}点）<br>
-        <span class="rs-sub">別の人がダブルチェックしてください</span></div>
-        <button class="btn btn-primary rs-check" data-rack-action="check">ダブルチェック完了</button>
-        <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>`;
+      el.innerHTML = `<div class="rs-info">🕒 <b>仮登録済み</b>（${esc(c.first_by || "?")} ${fmtTime(c.first_at)}）</div>
+        <div class="rs-verify">
+          <div class="rs-q">仮登録の着数は <b class="rs-qty">${qty}点</b> です。<br>この着数で合っていますか？</div>
+          <input id="rs-checker" class="rs-checker" placeholder="ダブルチェックした人の名前" autocomplete="off" />
+          <div class="rs-verify-btns">
+            <button class="btn btn-primary" data-rack-action="check">ダブルチェック完了</button>
+            <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>
+          </div>
+        </div>`;
+      const chk = $("#rs-checker"); if (chk) chk.value = rackCheckerDraft;
     } else {
       el.className = "rack-status none";
       el.innerHTML = `<div class="rs-info">このラック「${esc(rack)}」：<b>未確認</b>（${qty}点）</div>
@@ -293,14 +302,17 @@
   async function markRackChecked() {
     if (!ensureEditable()) return;
     const rack = (state.rack || "").trim(); if (!rack) return;
-    const who = requireStaff(); if (!who) return;
+    const inp = $("#rs-checker");
+    const who = (inp ? inp.value : rackCheckerDraft).trim();
+    if (!who) { toast("ダブルチェックした人の名前を入れてください"); if (inp) inp.focus(); return; }
     const c = state.rackChecks[rack];
     if (c && c.first_by && c.first_by === who) {
       if (!confirm("仮登録と同じ担当者です。ダブルチェックは別の人が推奨です。このまま完了にしますか？")) return;
     }
     try {
       await DB.setRackCheck(state.activeSessionId, rack, { status: "checked", checked_by: who, checked_at: new Date().toISOString() });
-      haptic("ok"); toast(`「${rack}」のダブルチェック完了`);
+      rackCheckerDraft = "";
+      haptic("ok"); toast(`「${rack}」のダブルチェック完了（${who}）`);
       state.rackChecks = await DB.getRackChecks(state.activeSessionId); renderRackRow();
     } catch (e) { toast("完了処理に失敗: " + (e.message || e)); }
   }
@@ -933,6 +945,9 @@
     }
 
     // ラック確認ステータスの操作
+    $("#rack-status").addEventListener("input", (e) => {
+      if (e.target.id === "rs-checker") rackCheckerDraft = e.target.value;
+    });
     $("#rack-status").addEventListener("click", (e) => {
       const a = e.target.closest("[data-rack-action]"); if (!a) return;
       const act = a.dataset.rackAction;
