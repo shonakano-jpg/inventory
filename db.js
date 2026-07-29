@@ -113,6 +113,9 @@
       const all = readJSON(LS.scans, {});
       if (all[sessionId]) { delete all[sessionId]; writeJSON(LS.scans, all); emit(); }
     },
+    async clearAllStocktakes() {
+      writeJSON(LS.sessions, []); writeJSON(LS.scans, {}); writeJSON(LS.rackChecks, {}); emit();
+    },
     // ラック確認ステータス（複数人の二重チェック防止）
     async getRackChecks(sessionId) {
       const all = readJSON(LS.rackChecks, {});
@@ -240,6 +243,13 @@
       const { error } = await sb.from("scans").delete().eq("session_id", sessionId);
       if (error) throw error;
     },
+    async clearAllStocktakes() {
+      // sessions を全削除すると scans / rack_checks は FK(on delete cascade)で消える
+      const { error } = await sb.from("sessions").delete().not("id", "is", null);
+      if (error) throw error;
+      try { await sb.from("rack_checks").delete().not("session_id", "is", null); } catch {}
+      try { await sb.from("scans").delete().not("session_id", "is", null); } catch {}
+    },
     // ラック確認ステータス（複数人の二重チェック防止）
     async getRackChecks(sessionId) {
       const { data, error } = await sb.from("rack_checks").select("*").eq("session_id", sessionId);
@@ -364,6 +374,7 @@
     removeScan(sid, sku, loc) { return this.impl.removeScan(sid, sku, loc); },
     adjustScan(sid, sku, loc, delta) { return this.impl.adjustScan(sid, sku, loc, delta); },
     clearScans(sid) { return this.impl.clearScans(sid); },
+    clearAllStocktakes() { return this.impl.clearAllStocktakes(); },
     getRackChecks(sid) { return this.impl.getRackChecks(sid); },
     getAllRackChecks() { return this.impl.getAllRackChecks(); },
     setRackCheck(sid, rack, patch) { return this.impl.setRackCheck(sid, rack, patch); },
