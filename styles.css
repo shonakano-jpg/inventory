@@ -241,6 +241,9 @@ select { appearance: none; }
 /* Lists */
 .list-title { font-size: 14px; color: var(--muted); margin: 18px 0 8px; }
 .recent-list, .master-list, .report-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.recent-sec { font-size: 12px; font-weight: 800; color: #7cc0ff; background: #10283f; border: 1px solid #244a6e;
+  border-radius: 8px; padding: 5px 10px; margin-top: 4px; }
+.recent-sec:first-child { margin-top: 0; }
 .row {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   padding: 12px 14px; display: flex; align-items: center; gap: 12px;
