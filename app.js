@@ -415,6 +415,7 @@
       || `<option value="">セッションなし</option>`;
 
     $$(".loc-btn").forEach((b) => b.classList.toggle("active", b.dataset.loc === state.location));
+    const ob = $("#offline-banner"); if (ob) ob.hidden = (DB.mode === "cloud"); // 未接続なら共有されない警告
     renderRackRow();
 
     // 確定ステータス（バッジ・ロック表示・操作可否）
