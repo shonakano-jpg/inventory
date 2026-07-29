@@ -336,6 +336,9 @@ body.home-active .tabbar { display: none; }
 /* Report */
 .report-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .report-head h2 { margin: 0; font-size: 18px; }
+.report-filter { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.report-filter label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.report-filter select { flex: 1; padding: 10px; border-radius: 10px; background: var(--surface); color: var(--text); border: 1px solid var(--line); font-size: 15px; }
 .report-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
 .rcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px; text-align: center; }
 .rcard .n { font-size: 22px; font-weight: 800; }
