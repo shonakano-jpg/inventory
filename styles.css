@@ -150,6 +150,8 @@ select { appearance: none; }
 .dc-act { display: flex; gap: 8px; }
 .dc-checker { flex: 1; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font-size: 16px; }
 .dc-done { flex: none; white-space: nowrap; }
+.dc-recheck { width: 100%; margin-top: 8px; background: var(--surface-2); color: #f39a9a; border: 1px solid #5a2626; font-weight: 700; padding: 10px; border-radius: 10px; }
+.dc-recheck:active { background: #3a1414; }
 
 /* 起動ホーム（棚卸しを始める） */
 .home-hero { text-align: center; padding: 40px 0 28px; }
