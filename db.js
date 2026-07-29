@@ -118,6 +118,12 @@
       const all = readJSON(LS.rackChecks, {});
       return all[sessionId] || {};
     },
+    async getAllRackChecks() {
+      const all = readJSON(LS.rackChecks, {});
+      const m = {};
+      Object.entries(all).forEach(([sid, bag]) => Object.entries(bag || {}).forEach(([rack, c]) => { m[sid + "|" + rack] = { ...c, session_id: sid, rack }; }));
+      return m;
+    },
     async setRackCheck(sessionId, rack, patch) {
       const all = readJSON(LS.rackChecks, {});
       const bag = all[sessionId] || (all[sessionId] = {});
@@ -240,6 +246,11 @@
       if (error) throw error;
       const m = {}; (data || []).forEach((r) => (m[r.rack] = r)); return m;
     },
+    async getAllRackChecks() {
+      const { data, error } = await sb.from("rack_checks").select("*");
+      if (error) throw error;
+      const m = {}; (data || []).forEach((r) => (m[r.session_id + "|" + r.rack] = r)); return m;
+    },
     async setRackCheck(sessionId, rack, patch) {
       const row = { session_id: sessionId, rack, ...patch, updated_at: now() };
       const { data, error } = await sb.from("rack_checks").upsert(row, { onConflict: "session_id,rack" }).select().single();
@@ -354,6 +365,7 @@
     adjustScan(sid, sku, loc, delta) { return this.impl.adjustScan(sid, sku, loc, delta); },
     clearScans(sid) { return this.impl.clearScans(sid); },
     getRackChecks(sid) { return this.impl.getRackChecks(sid); },
+    getAllRackChecks() { return this.impl.getAllRackChecks(); },
     setRackCheck(sid, rack, patch) { return this.impl.setRackCheck(sid, rack, patch); },
     removeRackCheck(sid, rack) { return this.impl.removeRackCheck(sid, rack); },
 

@@ -397,7 +397,18 @@ textarea.search { resize: vertical; font-family: inherit; line-height: 1.6; }
 .rcard-total .n { color: #7cc0ff; }
 
 /* 比率バー */
-.chart-title { font-size: 14px; color: var(--muted); margin: 20px 0 8px; }
+.chart-title { font-size: 16px; font-weight: 800; color: var(--text); margin: 22px 0 8px; }
+.chart-sub { font-size: 13px; color: var(--muted); margin: 16px 0 6px; }
+.report-note { font-size: 12px; color: #f4c66a; background: #241d10; border: 1px solid #4a3d1c; border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; }
+.cat-title { font-size: 14px; font-weight: 700; margin: 14px 0 4px; }
+.rank-list { list-style: none; counter-reset: rank; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rank-item { counter-increment: rank; display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.rank-item::before { content: counter(rank); flex: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--surface-2); color: #7cc0ff; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.rank-label { flex: 1; font-size: 14px; }
+.rank-qty { font-weight: 800; }
+select.search { -webkit-appearance: none; appearance: none; }
 
 /* 店舗詳細: 店舗名＋日付・タップ可能なロケーションカード */
 .report-sub { font-size: 15px; font-weight: 700; margin: 0 0 12px; line-height: 1.5; }
