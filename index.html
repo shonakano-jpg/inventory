@@ -26,20 +26,25 @@
     <label class="home-field">① 担当者
       <input id="ps-staff" class="search" placeholder="あなたの名前（例：田中）" autocomplete="off" />
     </label>
-    <label class="home-field">② 店舗
-      <select id="ps-store" class="search"></select>
-    </label>
-    <label class="home-field">③ 棚卸し日
-      <input id="ps-date" class="search" placeholder="例：2026-07-29" />
-    </label>
-    <div id="ps-error" class="ps-error" hidden></div>
-    <button id="ps-start" class="btn btn-primary btn-lg" style="width:100%;margin-top:4px">▶ この店舗・日付で始める</button>
-    <button id="ps-pin" class="btn btn-secondary btn-wide" style="width:100%;margin-top:8px">🔑 暗証番号でログイン（入力せずに棚卸し画面へ）</button>
-    <button id="ps-test" class="btn btn-ghost btn-wide" style="width:100%;margin-top:8px">🧪 テスト店舗で始める</button>
+    <p id="ps-staff-hint" class="muted" style="font-size:13px">まず担当者名を入力してください。</p>
 
-    <h3 class="home-sub">④ 入力中の棚卸し</h3>
-    <div class="muted" style="font-size:13px;margin-bottom:6px">他の人が入力中の棚卸しも出ます。タップで参加できます。</div>
-    <ul id="ps-list" class="ps-list"></ul>
+    <div id="home-step2" hidden>
+      <label class="home-field">② 店舗
+        <select id="ps-store" class="search"></select>
+      </label>
+      <label class="home-field">③ 棚卸し日
+        <input id="ps-date" class="search" placeholder="例：2026-07-29" />
+      </label>
+      <div id="ps-error" class="ps-error" hidden></div>
+      <button id="ps-start" class="btn btn-primary btn-lg" style="width:100%;margin-top:4px">▶ この店舗・日付で始める</button>
+      <button id="ps-test" class="btn btn-ghost btn-wide" style="width:100%;margin-top:8px">🧪 テスト店舗で始める</button>
+
+      <h3 class="home-sub">④ 入力中の棚卸しから選ぶ</h3>
+      <div class="muted" style="font-size:13px;margin-bottom:6px">他の人が入力中の棚卸しも出ます。タップで参加できます。</div>
+      <ul id="ps-list" class="ps-list"></ul>
+    </div>
+
+    <button id="ps-admin" class="btn btn-ghost btn-wide home-admin">管理者</button>
   </section>
 
   <!-- ===== スキャン ===== -->
@@ -159,8 +164,8 @@
     </div>
 
     <div class="setting-group">
-      <h3>ログイン暗証番号</h3>
-      <p class="muted">最初の画面の「🔑 暗証番号でログイン」で使います。設定すると、店舗・日付を入力せずに直前（最新）の棚卸し画面へ進めます。空にすると無効。</p>
+      <h3>管理者 暗証番号</h3>
+      <p class="muted">最初の画面の「管理者」ボタンで使います。設定すると、管理者画面（この設定）を開くときに暗証番号が必要になります。空にすると誰でも開けます。</p>
       <input id="login-pin" class="search" inputmode="numeric" placeholder="例：1234（この端末に保存）" autocomplete="off" />
     </div>
 
