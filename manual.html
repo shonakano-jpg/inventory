@@ -15,7 +15,8 @@
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
     line-height:1.75;font-size:16px;padding-bottom:60px}
   header{position:sticky;top:0;z-index:5;background:#111827;border-bottom:1px solid var(--line);
-    padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    padding:14px 18px;padding-top:calc(14px + env(safe-area-inset-top, 0px));
+    display:flex;align-items:center;justify-content:space-between;gap:10px}
   header .t{font-weight:800;font-size:17px}
   header a{color:#7cc0ff;text-decoration:none;font-weight:700;font-size:14px;
     border:1px solid #244a6e;border-radius:10px;padding:7px 12px;white-space:nowrap}
