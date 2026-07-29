@@ -152,6 +152,10 @@ select { appearance: none; }
 .dc-done { flex: none; white-space: nowrap; }
 
 /* 起動ホーム（棚卸しを始める） */
+.home-hero { text-align: center; padding: 40px 0 28px; }
+.home-hero-icon { font-size: 60px; line-height: 1; }
+.home-hero-title { font-size: 24px; font-weight: 800; margin-top: 10px; }
+.home-hero-sub { color: var(--muted); margin-top: 8px; font-size: 14px; }
 .home-card { max-height: 90vh; overflow-y: auto; }
 .home-field { display: block; font-size: 13px; color: var(--muted); font-weight: 700; margin: 10px 0 2px; }
 .home-field input { margin-top: 4px; }
