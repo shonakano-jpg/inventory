@@ -188,6 +188,11 @@
     if (sessionLocked()) { toast("本確定済みのため変更できません（レポートで解除できます）"); return false; }
     return true;
   }
+  // クラウド未接続なら読み取り不可（この端末だけに保存されて共有されない事故を防ぐ）
+  function ensureOnline() {
+    if (DB.mode !== "cloud") { toast("クラウド未接続のため読み取りできません。通信を確認して画面を再読み込みしてください"); return false; }
+    return true;
+  }
   function setActiveSession(id, doReload = true) {
     state.activeSessionId = id; localStorage.setItem(LS_ACTIVE, id);
     if (doReload) reload();
@@ -415,7 +420,8 @@
       || `<option value="">セッションなし</option>`;
 
     $$(".loc-btn").forEach((b) => b.classList.toggle("active", b.dataset.loc === state.location));
-    const ob = $("#offline-banner"); if (ob) ob.hidden = (DB.mode === "cloud"); // 未接続なら共有されない警告
+    const offline = (DB.mode !== "cloud"); // 未接続なら読み取り不可＋警告
+    const ob = $("#offline-banner"); if (ob) ob.hidden = !offline;
     renderRackRow();
 
     // 確定ステータス（バッジ・ロック表示・操作可否）
@@ -427,7 +433,7 @@
     else if (st === "provisional") { badge.hidden = false; badge.textContent = "仮確定"; badge.className = "session-status st-prov"; }
     else { badge.hidden = true; }
     $("#locked-banner").hidden = !locked;
-    [["#cam-open", locked], ["#manual-open", locked], ["#recent-reset", locked], ["#session-provisional", locked || st === "provisional"]]
+    [["#cam-open", locked || offline], ["#manual-open", locked || offline], ["#recent-reset", locked], ["#session-provisional", locked || st === "provisional"]]
       .forEach(([sel, dis]) => { const el = $(sel); if (el) el.disabled = !!dis; });
     $("#session-provisional").textContent = st === "provisional" ? "仮確定済み" : "仮確定";
 
@@ -515,6 +521,7 @@
   }
   function openManualModal() {
     if (!activeSession()) { openPickSession(); return; }
+    if (!ensureOnline()) return;
     if (!ensureEditable()) return;
     const cats = manualCategories();
     if (!cats.length) { toast("先にマスタ（商品）を取り込んでください"); return; }
@@ -539,6 +546,7 @@
     const n = Math.max(1, parseInt(qty, 10) || 1);
     const s = activeSession();
     if (!s) { toast("先に棚卸しセッションを作成してください"); showFeedback("bad", "セッション未選択", ""); return; }
+    if (!ensureOnline()) { showFeedback("bad", "クラウド未接続（共有されません）", ""); return; }
     if (!ensureEditable()) { showFeedback("bad", "本確定済み（変更不可）", ""); return; }
     try {
       const loc = effectiveLocation();
@@ -633,6 +641,7 @@
   // カメラ読取モーダルを開いてスキャン開始（開いている時だけ動作＝誤スキャン防止）
   async function openCam() {
     if (!activeSession()) { openPickSession(); return; }
+    if (!ensureOnline()) return;
     if (!ensureEditable()) return;
     if (Scanner.isScanning()) return;
     unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
