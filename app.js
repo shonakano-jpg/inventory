@@ -167,6 +167,7 @@
     } catch (e) { console.error(e); toast("読込エラー: " + (e.message || e)); }
     finally { loading = false; }
     render();
+    if (!$("#pick-session-modal").hidden) renderPsList(); // ホーム表示中は入力中一覧も更新
   }
 
   function activeSession() { return state.sessions.find((s) => s.id === state.activeSessionId) || null; }
@@ -450,7 +451,7 @@
     updateManualHint();
   }
   function openManualModal() {
-    if (!activeSession()) { openSessionModal(); return; }
+    if (!activeSession()) { openPickSession(); return; }
     if (!ensureEditable()) return;
     const cats = manualCategories();
     if (!cats.length) { toast("先にマスタ（商品）を取り込んでください"); return; }
@@ -593,7 +594,7 @@
       await Scanner.stop(); wrap.classList.remove("scanning");
       btn.textContent = "カメラ開始"; torchBtn.hidden = true; zoomRow.hidden = true;
     } else {
-      if (!activeSession()) { openSessionModal(); return; }
+      if (!activeSession()) { openPickSession(); return; }
       if (!ensureEditable()) return;
       unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
       try {
@@ -840,39 +841,72 @@
     toast("セッションを作成しました");
   }
 
-  /* ---------- 起動時: 店舗（棚卸し）の選択 ---------- */
+  /* ---------- 起動ホーム: 棚卸しを始める ---------- */
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+  function syncStaff(name) {
+    const s = $("#staff-name"); if (s) s.value = name;
+    const d = $("#device-name"); if (d) d.value = name;
+  }
   function openPickSession() {
+    const cur = activeSession();
+    $("#ps-staff").value = DB.getDeviceName() || "";
+    $("#ps-store").value = cur ? (cur.store || "") : "";
+    $("#ps-date").value = todayStr();
+    $("#ps-store-list").innerHTML = knownStores().map((s) => `<option value="${esc(s)}"></option>`).join("");
+    hidePsError();
     renderPsList();
     $("#pick-session-modal").hidden = false;
   }
   function closePickSession() { $("#pick-session-modal").hidden = true; }
-  // テスト用の店舗ですぐ始める（今日のセッションを再利用 or 作成）
-  async function startTestSession() {
-    const store = TEST_STORE;
-    const name = new Date().toISOString().slice(0, 10);
-    let sess = state.sessions.find((s) => s.store === store && s.name === name && s.status !== "final" && s.status !== "closed");
+  function showPsError(msg) { const e = $("#ps-error"); if (e) { e.textContent = msg; e.hidden = false; } }
+  function hidePsError() { const e = $("#ps-error"); if (e) e.hidden = true; }
+
+  // ホームから開始（②店舗③日付）。同じ店舗×日付が既にあれば作らずエラー表示。
+  async function startFromHome() {
+    const staff = $("#ps-staff").value.trim();
+    DB.setDeviceName(staff); syncStaff(staff);
+    const store = $("#ps-store").value.trim();
+    const date = $("#ps-date").value.trim() || todayStr();
+    if (!store) { showPsError("店舗を入力してください"); $("#ps-store").focus(); return; }
+    hidePsError();
+    // 最新のセッションを取り直して重複チェック（他の人が作っていないか）
+    try { state.sessions = await DB.getSessions(); } catch {}
+    const dup = state.sessions.find((s) => (s.store || "") === store && (s.name || "") === date && s.status !== "final" && s.status !== "closed");
+    if (dup) {
+      showPsError(`「${store} / ${date}」はすでにあります。下の一覧から選んで参加してください。`);
+      renderPsList();
+      return;
+    }
     try {
-      if (!sess) {
-        if (!state.stores.some((s) => s.name === store)) {
-          await DB.upsertStore({ name: store, brand: "テスト", area: "" });
-          state.stores = await DB.getStores();
-        }
-        sess = await DB.createSession(name, store);
-        state.sessions = await DB.getSessions();
+      if (!state.stores.some((s) => s.name === store)) {
+        await DB.upsertStore({ name: store, brand: store === TEST_STORE ? "テスト" : "", area: "" });
+        state.stores = await DB.getStores();
       }
+      const sess = await DB.createSession(date, store);
+      state.sessions = await DB.getSessions();
       closePickSession();
       setActiveSession(sess.id);
-      toast("テスト店舗の棚卸しを開始しました");
-    } catch (e) { toast("開始に失敗: " + (e.message || e)); }
+      toast(`棚卸しを開始しました（${store} / ${date}）`);
+    } catch (e) { showPsError("作成に失敗: " + (e.message || e)); }
   }
+
+  async function startTestSession() {
+    $("#ps-store").value = TEST_STORE;
+    $("#ps-date").value = todayStr();
+    await startFromHome();
+  }
+
   function renderPsList() {
     const ul = $("#ps-list"); if (!ul) return;
-    const list = state.sessions.filter((s) => s.status !== "final" && s.status !== "closed");
-    if (!list.length) { ul.innerHTML = `<li class="empty">続けられる棚卸しがありません。下のボタンで新しく始めてください。</li>`; return; }
+    const list = state.sessions.filter((s) => s.status !== "final" && s.status !== "closed")
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    if (!list.length) { ul.innerHTML = `<li class="empty">入力中の棚卸しはありません。上で店舗・日付を入れて始めてください。</li>`; return; }
+    const qtyBySession = {};
+    state.allScans.forEach((sc) => { qtyBySession[sc.session_id] = (qtyBySession[sc.session_id] || 0) + sc.qty; });
     ul.innerHTML = list.map((s) => `
       <li class="ps-row row${s.id === state.activeSessionId ? " active" : ""}" data-sid="${esc(s.id)}">
         <div class="row-main"><div class="row-name">${esc(s.store || "（店舗未設定）")}</div>
-        <div class="row-sub">🗓 ${esc(s.name || "")}${s.status === "provisional" ? " ・ 仮確定" : ""}</div></div>
+        <div class="row-sub">🗓 ${esc(s.name || "")} ・ ${qtyBySession[s.id] || 0}点${s.status === "provisional" ? " ・ 仮確定" : ""}</div></div>
         <span class="chev">›</span></li>`).join("");
   }
 
@@ -1006,10 +1040,11 @@
     $$(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
 
     $("#session-select").addEventListener("change", (e) => setActiveSession(e.target.value));
-    $("#new-session-btn").addEventListener("click", openSessionModal);
+    $("#new-session-btn").addEventListener("click", openPickSession);
 
-    // 起動時の店舗選択
-    $("#ps-new").addEventListener("click", () => { closePickSession(); openSessionModal(); });
+    // 起動ホーム（棚卸しを始める）
+    $("#ps-staff").addEventListener("input", (e) => { DB.setDeviceName(e.target.value); syncStaff(e.target.value); });
+    $("#ps-start").addEventListener("click", startFromHome);
     $("#ps-test").addEventListener("click", startTestSession);
     $("#ps-list").addEventListener("click", (e) => {
       const li = e.target.closest("[data-sid]"); if (!li) return;
@@ -1222,9 +1257,8 @@
     await seedMasterIfEmpty();
     await seedStoresIfEmpty();
     await reload();
-    // 起動時に「どの店舗の棚卸しですか？」と聞く（複数店舗を同時に進める運用向け）
-    if (state.sessions.length) openPickSession();
-    else openSessionModal();
+    // 起動時にホーム（担当者・店舗・日付・入力中の一覧）を表示
+    openPickSession();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   }
   document.addEventListener("DOMContentLoaded", main);
