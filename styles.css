@@ -168,6 +168,28 @@ select { appearance: none; }
 }
 .undo-last:active { background: #3a2e12; }
 
+/* カメラ読取モーダル（開いている時だけスキャン） */
+.cam-open { width: 100%; }
+.cam-modal { position: fixed; inset: 0; z-index: 60; background: #000; display: flex; flex-direction: column; }
+.cam-modal[hidden] { display: none; }
+.cam-top { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; padding-top: calc(12px + env(safe-area-inset-top, 0px)); background: #111827; }
+.cam-btn { background: #1e2634; color: #fff; border: 1px solid #2b3547; border-radius: 10px; padding: 10px 14px; font-weight: 700; font-size: 15px; }
+.cam-btn:active { background: #2b3547; }
+.cam-count { color: #7ee2a8; font-weight: 800; font-size: 18px; }
+.cam-stage { position: relative; flex: 1; min-height: 0; background: #000; overflow: hidden; }
+.cam-stage #reader { width: 100%; height: 100%; }
+.cam-stage #reader video { width: 100% !important; height: 100% !important; object-fit: cover; display: block; }
+.cam-modal .scan-overlay { position: absolute; inset: 0; height: auto; display: block; }
+.cam-modal .scan-frame { position: absolute; left: 6%; right: 6%; top: 30%; bottom: 30%;
+  border: 2px solid rgba(59,130,246,.9); border-radius: 10px; box-shadow: none; }
+.cam-modal .scan-flash { position: absolute; inset: 0; }
+.cam-modal .zoom-row { background: #111827; padding: 10px 16px; margin: 0; }
+#zoom-row[hidden] { display: none; }
+#torch-toggle[hidden] { display: none; }
+.cam-hint { background: #111827; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: center;
+  padding: 10px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+
 /* Scanner */
 .scanner-wrap { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; }
 /* カメラは「バーコード帯」くらいの高さに。読取は全フレームで行うので表示はcoverで中央を切り出すだけ。 */

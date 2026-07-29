@@ -81,19 +81,7 @@
       <ul id="rackprog-list" class="rackprog-list"></ul>
     </div>
 
-    <div id="scanner-wrap" class="scanner-wrap">
-      <div id="reader"></div>
-      <div id="scan-overlay" class="scan-overlay"><div class="scan-frame"></div></div>
-      <div id="scan-flash" class="scan-flash"><span id="scan-flash-text"></span></div>
-      <div class="scanner-controls">
-        <button id="cam-toggle" class="btn btn-primary btn-lg">カメラ開始</button>
-        <button id="torch-toggle" class="btn btn-ghost" hidden>ライト</button>
-      </div>
-      <div id="zoom-row" class="zoom-row" hidden>
-        <span class="zoom-lbl">🔍 ズーム</span>
-        <input id="zoom-range" type="range" min="1" max="5" step="0.1" value="2" aria-label="ズーム" />
-      </div>
-    </div>
+    <button id="cam-open" class="btn btn-primary btn-lg btn-wide cam-open">📷 カメラで読み取る</button>
 
     <div id="scan-feedback" class="scan-feedback"></div>
 
@@ -217,6 +205,25 @@
   </section>
 
 </main>
+
+<!-- カメラ読取モーダル（開いている時だけスキャン動作） -->
+<div id="cam-modal" class="cam-modal" hidden>
+  <div class="cam-top">
+    <button id="cam-close" class="btn cam-btn">✕ 閉じる</button>
+    <span id="cam-count" class="cam-count">0点</span>
+    <button id="torch-toggle" class="btn cam-btn" hidden>💡 ライト</button>
+  </div>
+  <div class="cam-stage">
+    <div id="reader"></div>
+    <div id="scan-overlay" class="scan-overlay"><div class="scan-frame"></div></div>
+    <div id="scan-flash" class="scan-flash"><span id="scan-flash-text"></span></div>
+  </div>
+  <div id="zoom-row" class="zoom-row" hidden>
+    <span class="zoom-lbl">🔍 ズーム</span>
+    <input id="zoom-range" type="range" min="1" max="5" step="0.1" value="2" aria-label="ズーム" />
+  </div>
+  <div id="cam-hint" class="cam-hint">値札のバーコードを枠に入れてください。読み取ると音・振動・緑の点滅でお知らせします。</div>
+</div>
 
 <nav class="tabbar">
   <button class="tab active" data-view="scan"><span class="tab-ic">▣</span>スキャン</button>

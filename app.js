@@ -140,6 +140,8 @@
   }
 
   function switchView(v) {
+    // スキャン画面から離れる時はカメラを確実に停止（誤スキャン防止）
+    if (v !== "scan" && (Scanner.isScanning() || !$("#cam-modal").hidden)) closeCam();
     state.view = v;
     $$(".view").forEach((el) => el.classList.toggle("active", el.id === "view-" + v));
     // マスタは設定内の機能なので、マスタ表示中は「設定」タブを点灯
@@ -403,7 +405,7 @@
     else if (st === "provisional") { badge.hidden = false; badge.textContent = "仮確定"; badge.className = "session-status st-prov"; }
     else { badge.hidden = true; }
     $("#locked-banner").hidden = !locked;
-    [["#cam-toggle", locked], ["#manual-open", locked], ["#recent-reset", locked], ["#session-provisional", locked || st === "provisional"]]
+    [["#cam-open", locked], ["#manual-open", locked], ["#recent-reset", locked], ["#session-provisional", locked || st === "provisional"]]
       .forEach(([sel, dis]) => { const el = $(sel); if (el) el.disabled = !!dis; });
     $("#session-provisional").textContent = st === "provisional" ? "仮確定済み" : "仮確定";
 
@@ -413,6 +415,7 @@
     $("#stat-total").textContent = totalQty;
     $("#stat-kinds").textContent = kinds;
     $("#stat-unknown").textContent = unknown;
+    updateCamCount();
 
     renderRecentList(locked);
   }
@@ -625,35 +628,45 @@
     clearTimeout(fbT); fbT = setTimeout(() => el.classList.remove("show"), 2600);
   }
 
-  async function toggleCamera() {
-    const btn = $("#cam-toggle"), wrap = $("#scanner-wrap"), torchBtn = $("#torch-toggle"), zoomRow = $("#zoom-row");
-    if (Scanner.isScanning()) {
-      await Scanner.stop(); wrap.classList.remove("scanning");
-      btn.textContent = "カメラ開始"; torchBtn.hidden = true; zoomRow.hidden = true;
-    } else {
-      if (!activeSession()) { openPickSession(); return; }
-      if (!ensureEditable()) return;
-      unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
-      try {
-        btn.textContent = "起動中…";
-        await Scanner.start("reader", handleScan);
-        wrap.classList.add("scanning"); btn.textContent = "カメラ停止";
-        setTimeout(() => {
-          if (Scanner.torchSupported()) torchBtn.hidden = false;
-          const zc = Scanner.zoomCap();
-          if (zc) {
-            const r = $("#zoom-range");
-            r.min = zc.min; r.max = zc.max; r.step = zc.step || 0.1;
-            const cur = Scanner.currentZoom();
-            if (cur != null) r.value = cur;
-            zoomRow.hidden = false;
-          } else { zoomRow.hidden = true; }
-        }, 500);
-      } catch (e) {
-        btn.textContent = "カメラ開始";
-        toast("カメラ起動失敗: " + (e.message || e) + "（HTTPSまたはlocalhostで開いてください）");
-      }
+  // カメラ読取モーダルを開いてスキャン開始（開いている時だけ動作＝誤スキャン防止）
+  async function openCam() {
+    if (!activeSession()) { openPickSession(); return; }
+    if (!ensureEditable()) return;
+    if (Scanner.isScanning()) return;
+    unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
+    const modal = $("#cam-modal"), wrap = $("#cam-modal .cam-stage"), torchBtn = $("#torch-toggle"), zoomRow = $("#zoom-row");
+    modal.hidden = false;
+    modal.classList.add("scanning"); // カメラ表示ON
+    updateCamCount();
+    try {
+      await Scanner.start("reader", handleScan);
+      setTimeout(() => {
+        if (Scanner.torchSupported()) torchBtn.hidden = false; else torchBtn.hidden = true;
+        const zc = Scanner.zoomCap();
+        if (zc) {
+          const r = $("#zoom-range");
+          r.min = zc.min; r.max = zc.max; r.step = zc.step || 0.1;
+          const cur = Scanner.currentZoom();
+          if (cur != null) r.value = cur;
+          zoomRow.hidden = false;
+        } else { zoomRow.hidden = true; }
+      }, 500);
+    } catch (e) {
+      await closeCam();
+      toast("カメラ起動失敗: " + (e.message || e) + "（HTTPSまたはlocalhostで開いてください）");
     }
+  }
+  async function closeCam() {
+    try { await Scanner.stop(); } catch {}
+    const modal = $("#cam-modal");
+    modal.classList.remove("scanning");
+    modal.hidden = true;
+    $("#torch-toggle").hidden = true;
+    $("#zoom-row").hidden = true;
+  }
+  function updateCamCount() {
+    const el = $("#cam-count"); if (!el) return;
+    el.textContent = state.scans.reduce((a, s) => a + s.qty, 0) + "点";
   }
 
   /* === マスタ === */
@@ -1223,7 +1236,10 @@
       renderRackRow();
     });
 
-    $("#cam-toggle").addEventListener("click", toggleCamera);
+    $("#cam-open").addEventListener("click", openCam);
+    $("#cam-close").addEventListener("click", closeCam);
+    // アプリが背面に回ったらカメラ停止（誤スキャン防止）
+    document.addEventListener("visibilitychange", () => { if (document.hidden && !$("#cam-modal").hidden) closeCam(); });
     $("#zoom-range").addEventListener("input", (e) => { Scanner.setZoom(parseFloat(e.target.value)); });
     $("#torch-toggle").addEventListener("click", async function () {
       this._on = !this._on; await Scanner.toggleTorch(this._on);
