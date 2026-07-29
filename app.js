@@ -32,7 +32,7 @@
   const LS_RACK = "fi_rack";
 
   const state = {
-    view: "scan",
+    view: "home",
     sessions: [],
     activeSessionId: localStorage.getItem(LS_ACTIVE) || "",
     itemMap: {},
@@ -145,7 +145,7 @@
     const tabFor = (v === "master") ? "settings" : v;
     $$(".tab").forEach((el) => el.classList.toggle("active", el.dataset.view === tabFor));
     render();
-    if (v === "report" || v === "check") reload(); // 最新データを取り直す
+    if (v === "report" || v === "check" || v === "home") reload(); // 最新データを取り直す
   }
 
   /* ---------- データ再取得 ---------- */
@@ -169,7 +169,7 @@
     } catch (e) { console.error(e); toast("読込エラー: " + (e.message || e)); }
     finally { loading = false; }
     render();
-    if (!$("#pick-session-modal").hidden) renderPsList(); // ホーム表示中は入力中一覧も更新
+    if (state.view === "home") renderPsList(); // ホーム表示中は入力中一覧も更新
   }
 
   function activeSession() { return state.sessions.find((s) => s.id === state.activeSessionId) || null; }
@@ -195,7 +195,8 @@
   function render() {
     renderBadge();
     renderCheckBadge();
-    if (state.view === "scan") renderScan();
+    if (state.view === "home") renderHome();
+    else if (state.view === "scan") renderScan();
     else if (state.view === "check") renderCheckView();
     else if (state.view === "master") renderMaster();
     else if (state.view === "report") renderReport();
@@ -884,22 +885,28 @@
     const s = $("#staff-name"); if (s) s.value = name;
     const d = $("#device-name"); if (d) d.value = name;
   }
-  function openPickSession() {
-    const cur = activeSession();
-    $("#ps-staff").value = DB.getDeviceName() || "";
+  // ホーム画面へ移動（＝1ページ目）
+  function openPickSession() { hidePsError(); switchView("home"); }
+  // ホーム画面の描画（担当者・店舗リスト・日付・入力中一覧）
+  function renderHome() {
+    const staffEl = $("#ps-staff");
+    if (staffEl && document.activeElement !== staffEl) staffEl.value = DB.getDeviceName() || "";
     // ② 店舗は設定で登録済みの店舗のみをリスト表示
     const stores = state.stores.map((s) => s.name);
     const sel = $("#ps-store");
-    sel.innerHTML = stores.length
-      ? stores.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")
-      : `<option value="">（設定で店舗を登録してください）</option>`;
-    if (cur && cur.store && stores.includes(cur.store)) sel.value = cur.store;
-    $("#ps-date").value = todayStr();
-    hidePsError();
+    if (sel) {
+      const prev = sel.value;
+      sel.innerHTML = stores.length
+        ? stores.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")
+        : `<option value="">（設定で店舗を登録してください）</option>`;
+      const cur = activeSession();
+      if (prev && stores.includes(prev)) sel.value = prev;
+      else if (cur && cur.store && stores.includes(cur.store)) sel.value = cur.store;
+    }
+    const dateEl = $("#ps-date");
+    if (dateEl && !dateEl.value) dateEl.value = todayStr();
     renderPsList();
-    $("#pick-session-modal").hidden = false;
   }
-  function closePickSession() { $("#pick-session-modal").hidden = true; }
   function showPsError(msg) { const e = $("#ps-error"); if (e) { e.textContent = msg; e.hidden = false; } }
   function hidePsError() { const e = $("#ps-error"); if (e) e.hidden = true; }
 
@@ -921,8 +928,8 @@
       }
       const sess = await DB.createSession(date, store);
       state.sessions = await DB.getSessions();
-      closePickSession();
       setActiveSession(sess.id);
+      switchView("scan");
       toast(`棚卸しを開始しました（${store} / ${date}）`);
     } catch (e) { showPsError("作成に失敗: " + (e.message || e)); }
   }
@@ -1095,7 +1102,7 @@
     $("#ps-test").addEventListener("click", startTestSession);
     $("#ps-list").addEventListener("click", (e) => {
       const li = e.target.closest("[data-sid]"); if (!li) return;
-      setActiveSession(li.dataset.sid); closePickSession();
+      setActiveSession(li.dataset.sid); switchView("scan");
     });
 
     // 担当者名（スキャン画面から常時編集可・設定と同期）
@@ -1286,6 +1293,18 @@
       finally { btn.disabled = false; btn.textContent = "接続して保存"; renderSettings(); }
     });
     $("#sb-clear-btn").addEventListener("click", async () => { DB.disconnectCloud(); toast("接続を解除しました"); await reload(); });
+    $("#wipe-all-btn").addEventListener("click", async () => {
+      if (!confirm("全ての棚卸しデータ（全店舗のセッション・読取・ラック確認）を消去します。\n商品マスタと店舗は残ります。元に戻せません。実行しますか？")) return;
+      if (!confirm("本当によろしいですか？（全端末に反映されます）")) return;
+      try {
+        await DB.clearAllStocktakes();
+        state.activeSessionId = ""; localStorage.removeItem(LS_ACTIVE);
+        hideUndoLast();
+        await reload();
+        switchView("home");
+        toast("すべての棚卸しデータを消去しました");
+      } catch (e) { toast("消去に失敗: " + (e.message || e)); }
+    });
     $("#wipe-btn").addEventListener("click", () => {
       if (confirm("この端末のローカルデータ（マスタ・セッション・読取）を消去しますか？\nクラウド共有中のデータは消えません。")) {
         DB.wipeLocal(); state.activeSessionId = ""; localStorage.removeItem(LS_ACTIVE); reload();
@@ -1304,8 +1323,8 @@
     await seedMasterIfEmpty();
     await seedStoresIfEmpty();
     await reload();
-    // 起動時にホーム（担当者・店舗・日付・入力中の一覧）を表示
-    openPickSession();
+    // 起動時はホーム（1ページ目）を表示
+    switchView("home");
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   }
   document.addEventListener("DOMContentLoaded", main);
