@@ -76,18 +76,13 @@
       <datalist id="rack-datalist"></datalist>
     </div>
     <div id="rack-status" class="rack-status" hidden></div>
-    <button id="rackprog-toggle" class="btn btn-ghost btn-wide rackprog-toggle" hidden>🗂 ラックの進捗を見る</button>
-    <div id="rackprog-panel" class="rackprog-panel" hidden>
-      <ul id="rackprog-list" class="rackprog-list"></ul>
+
+    <div class="input-buttons">
+      <button id="cam-open" class="btn btn-primary btn-lg btn-wide">① 📷 カメラで読み取り</button>
+      <button id="manual-open" class="btn btn-primary btn-lg btn-wide">② ✍️ 手入力（タグが付いていない商品）</button>
     </div>
 
-    <button id="cam-open" class="btn btn-primary btn-lg btn-wide cam-open">📷 カメラで読み取る</button>
-
     <div id="scan-feedback" class="scan-feedback"></div>
-
-    <button id="undo-last" class="btn btn-wide undo-last" hidden>↩ 直前の読取を取り消す</button>
-
-    <button id="manual-open" class="btn btn-secondary btn-wide">✍️ 手入力（カテゴリ・価格・着数）</button>
 
     <div class="progress-row">
       <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">総点数</div></div>
@@ -223,6 +218,9 @@
     <input id="zoom-range" type="range" min="1" max="5" step="0.1" value="2" aria-label="ズーム" />
   </div>
   <div id="cam-hint" class="cam-hint">値札のバーコードを枠に入れてください。読み取ると音・振動・緑の点滅でお知らせします。</div>
+  <div class="cam-bottom">
+    <button id="cam-done" class="btn cam-done">✓ 読取完了</button>
+  </div>
 </div>
 
 <nav class="tabbar">
