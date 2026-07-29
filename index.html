@@ -20,31 +20,48 @@
 
 <main id="app">
 
-  <!-- ===== ホーム（棚卸しを始める） ===== -->
+  <!-- ===== ホーム（棚卸しを始める・3ステップ） ===== -->
   <section id="view-home" class="view active">
-    <h2 class="view-title">棚卸しを始める</h2>
-    <label class="home-field">① 担当者
-      <input id="ps-staff" class="search" placeholder="あなたの名前（例：田中）" autocomplete="off" />
-    </label>
-    <p id="ps-staff-hint" class="muted" style="font-size:13px">まず担当者名を入力してください。</p>
+    <!-- step0: ランディング -->
+    <div id="home-s0" class="home-step">
+      <div class="home-hero">
+        <div class="home-hero-icon">📦</div>
+        <div class="home-hero-title">古着棚卸し</div>
+        <div class="home-hero-sub">スマホで値札を読んで在庫を数えます</div>
+      </div>
+      <button id="home-start-btn" class="btn btn-primary btn-lg btn-wide">▶ 棚卸を始める</button>
+    </div>
 
-    <div id="home-step2" hidden>
-      <label class="home-field">② 店舗
+    <!-- step1: 担当者 -->
+    <div id="home-s1" class="home-step" hidden>
+      <h2 class="view-title">① 担当者</h2>
+      <label class="home-field">あなたの名前
+        <input id="ps-staff" class="search" placeholder="例：田中" autocomplete="off" />
+      </label>
+      <button id="ps-next" class="btn btn-primary btn-lg btn-wide">次へ ▶</button>
+      <button id="home-back-1" class="btn btn-ghost btn-wide" style="margin-top:8px">← 戻る</button>
+    </div>
+
+    <!-- step2: 店舗・棚卸し日 / 入力中から選ぶ -->
+    <div id="home-s2" class="home-step" hidden>
+      <h2 class="view-title">② 店舗・棚卸し日</h2>
+      <label class="home-field">店舗
         <select id="ps-store" class="search"></select>
       </label>
-      <label class="home-field">③ 棚卸し日
+      <label class="home-field">棚卸し日
         <input id="ps-date" class="search" placeholder="例：2026-07-29" />
       </label>
       <div id="ps-error" class="ps-error" hidden></div>
-      <button id="ps-start" class="btn btn-primary btn-lg" style="width:100%;margin-top:4px">▶ この店舗・日付で始める</button>
-      <button id="ps-test" class="btn btn-ghost btn-wide" style="width:100%;margin-top:8px">🧪 テスト店舗で始める</button>
+      <button id="ps-start" class="btn btn-primary btn-lg btn-wide">▶ 棚卸を始める</button>
+      <button id="ps-test" class="btn btn-ghost btn-wide" style="margin-top:8px">🧪 テスト店舗で始める</button>
 
-      <h3 class="home-sub">④ 入力中の棚卸しから選ぶ</h3>
+      <h3 class="home-sub">入力中の棚卸しから選ぶ</h3>
       <div class="muted" style="font-size:13px;margin-bottom:6px">他の人が入力中の棚卸しも出ます。タップで参加できます。</div>
       <ul id="ps-list" class="ps-list"></ul>
+      <button id="home-back-2" class="btn btn-ghost btn-wide" style="margin-top:8px">← 担当者に戻る</button>
     </div>
 
-    <button id="ps-admin" class="btn btn-ghost btn-wide home-admin">管理者</button>
+    <button id="ps-admin" class="btn btn-ghost btn-wide home-admin">🔒 管理者（設定）</button>
   </section>
 
   <!-- ===== スキャン ===== -->
@@ -148,8 +165,8 @@
 
     <div class="setting-group">
       <h3>管理者 暗証番号</h3>
-      <p class="muted">最初の画面の「管理者」ボタンで使います。設定すると、管理者画面（この設定）を開くときに暗証番号が必要になります。空にすると誰でも開けます。</p>
-      <input id="login-pin" class="search" inputmode="numeric" placeholder="例：1234（この端末に保存）" autocomplete="off" />
+      <p class="muted">この設定画面を開くときに必要な暗証番号です。<b>初期値は 0913</b>。変更するには新しい番号を入力してください（空にすると初期値 0913 に戻ります）。この端末に保存されます。</p>
+      <input id="login-pin" class="search" inputmode="numeric" placeholder="初期値 0913" autocomplete="off" />
     </div>
 
     <div class="setting-group">

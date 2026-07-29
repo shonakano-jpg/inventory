@@ -34,6 +34,7 @@
 
   const state = {
     view: "home",
+    homeStep: 0, // ホームのステップ（0:開始 1:担当者 2:店舗/日付）
     sessions: [],
     activeSessionId: localStorage.getItem(LS_ACTIVE) || "",
     itemMap: {},
@@ -889,19 +890,22 @@
     const s = $("#staff-name"); if (s) s.value = name;
     const d = $("#device-name"); if (d) d.value = name;
   }
-  // ホーム画面へ移動（＝1ページ目）
-  function openPickSession() { hidePsError(); switchView("home"); }
-  // 担当者が入っていれば②以降を表示（担当者→店舗・日付/一覧 の流れ）
-  function updateHomeStep() {
-    const staff = ($("#ps-staff").value || "").trim();
-    $("#home-step2").hidden = !staff;
-    $("#ps-staff-hint").hidden = !!staff;
+  // ホーム画面へ移動（最初のステップから）
+  function openPickSession() { hidePsError(); state.homeStep = 0; switchView("home"); }
+  function applyHomeStep() {
+    $("#home-s0").hidden = state.homeStep !== 0;
+    $("#home-s1").hidden = state.homeStep !== 1;
+    $("#home-s2").hidden = state.homeStep !== 2;
+  }
+  function goHomeStep(n) {
+    state.homeStep = n; applyHomeStep();
+    if (n === 1) setTimeout(() => { const el = $("#ps-staff"); if (el) el.focus(); }, 60);
   }
   // ホーム画面の描画（担当者・店舗リスト・日付・入力中一覧）
   function renderHome() {
+    applyHomeStep();
     const staffEl = $("#ps-staff");
     if (staffEl && document.activeElement !== staffEl) staffEl.value = DB.getDeviceName() || "";
-    updateHomeStep();
     // ② 店舗は設定で登録済みの店舗のみをリスト表示
     const stores = state.stores.map((s) => s.name);
     const sel = $("#ps-store");
@@ -961,11 +965,11 @@
     await createOrJoinSession(TEST_STORE, $("#ps-date").value.trim() || todayStr());
   }
 
-  // 管理者ボタン → 暗証番号入力 → 設定（管理者画面）へ
-  function adminLogin() {
-    const saved = (localStorage.getItem(LS_PIN) || "").trim();
-    if (!saved) { switchView("settings"); return; } // 未設定なら設定画面へ（そこで暗証番号を決める）
-    const entered = prompt("管理者 暗証番号を入力してください");
+  const DEFAULT_PIN = "0913"; // 初期の管理者暗証番号
+  // 設定（管理者画面）は暗証番号が必要。未設定なら初期値0913。
+  function openSettings() {
+    const saved = (localStorage.getItem(LS_PIN) || DEFAULT_PIN).trim();
+    const entered = prompt("設定を開くには暗証番号を入力してください");
     if (entered == null) return;
     if (entered.trim() !== saved) { toast("暗証番号が違います"); return; }
     switchView("settings");
@@ -1112,17 +1116,30 @@
 
   /* ---------- イベント配線 ---------- */
   function wire() {
-    $$(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
-    $("#home-btn").addEventListener("click", () => switchView("home"));
+    $$(".tab").forEach((t) => t.addEventListener("click", () => {
+      const v = t.dataset.view;
+      if (v === "settings") openSettings(); // 設定は暗証番号ゲート
+      else switchView(v);
+    }));
+    $("#home-btn").addEventListener("click", openPickSession);
 
     $("#session-select").addEventListener("change", (e) => setActiveSession(e.target.value));
     $("#new-session-btn").addEventListener("click", openPickSession);
 
-    // 起動ホーム（棚卸しを始める）
-    $("#ps-staff").addEventListener("input", (e) => { DB.setDeviceName(e.target.value); syncStaff(e.target.value); updateHomeStep(); });
+    // 起動ホーム（3ステップ）
+    $("#home-start-btn").addEventListener("click", () => goHomeStep(1));
+    $("#home-back-1").addEventListener("click", () => goHomeStep(0));
+    $("#home-back-2").addEventListener("click", () => goHomeStep(1));
+    $("#ps-next").addEventListener("click", () => {
+      const staff = ($("#ps-staff").value || "").trim();
+      if (!staff) { toast("担当者名を入力してください"); $("#ps-staff").focus(); return; }
+      DB.setDeviceName(staff); syncStaff(staff);
+      goHomeStep(2); renderHome();
+    });
+    $("#ps-staff").addEventListener("input", (e) => { DB.setDeviceName(e.target.value); syncStaff(e.target.value); });
     $("#ps-start").addEventListener("click", startFromHome);
     $("#ps-test").addEventListener("click", startTestSession);
-    $("#ps-admin").addEventListener("click", adminLogin);
+    $("#ps-admin").addEventListener("click", openSettings);
     $("#ps-list").addEventListener("click", (e) => {
       const li = e.target.closest("[data-sid]"); if (!li) return;
       setActiveSession(li.dataset.sid); switchView("scan");
