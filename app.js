@@ -48,6 +48,7 @@
     pendingSku: "",
     reportKey: null, // 選択中の店舗×日付グループ { store, date }（null=一覧）
     reportLoc: "", // 詳細でのロケーション絞り込み（""=全体）
+    reportStore: null, // レポート一覧の店舗フィルタ（null=未設定→開いた時にアクティブ店舗、""=すべて）
     rackChecks: {}, // { rack: {...} } アクティブセッションのラック確認
     allRackChecks: {}, // { "session_id|rack": {...} } レポート用（全セッション）
     rackTableMissing: false,
@@ -147,6 +148,11 @@
     const tabFor = (v === "master") ? "settings" : v;
     $$(".tab").forEach((el) => el.classList.toggle("active", el.dataset.view === tabFor));
     document.body.classList.toggle("home-active", v === "home"); // ホームではタブバーを隠す
+    // レポートを開いた時、店舗フィルタ未設定なら「選択中（棚卸し中）の店舗」に絞る
+    if (v === "report" && state.reportStore === null) {
+      const s = activeSession();
+      state.reportStore = (s && s.store) ? storeKey(s.store) : "";
+    }
     render();
     if (v === "report" || v === "check" || v === "home") reload(); // 最新データを取り直す
   }
@@ -732,15 +738,32 @@
       const g = (groups[key] = groups[key] || { store, date, qty: 0 });
       if (scanConfirmed(sc)) g.qty += sc.qty;
     });
-    const rows = Object.values(groups).sort((a, b) =>
+    let rows = Object.values(groups).sort((a, b) =>
       a.store.localeCompare(b.store, "ja") || b.date.localeCompare(a.date));
+
+    // 店舗フィルタ（データに登場する店舗＋選択中の店舗。既定は棚卸し中の店舗）
+    const filter = state.reportStore || ""; // ""=すべて
+    const storeVals = new Set(rows.map((r) => r.store));
+    if (filter) storeVals.add(filter); // データが無くても選択中の店舗は選べるように
+    const storeSet = Array.from(storeVals).sort((a, b) => a.localeCompare(b, "ja"));
+    const filterHtml =
+      `<div class="report-filter"><label for="report-store">店舗で絞り込み</label>
+         <select id="report-store"><option value="">すべての店舗</option>` +
+      storeSet.map((s) => `<option value="${esc(s)}" ${s === filter ? "selected" : ""}>${esc(s)}</option>`).join("") +
+      `</select></div>`;
+
+    if (filter) rows = rows.filter((r) => r.store === filter);
     const grand = rows.reduce((a, r) => a + r.qty, 0);
-    if (!rows.length) { body.innerHTML = `<div class="empty">まだ読み取りデータがありません。</div>`; return; }
-    body.innerHTML =
+    if (!rows.length) {
+      body.innerHTML = filterHtml +
+        `<div class="empty">${filter ? "「" + esc(filter) + "」の棚卸しデータはありません。" : "まだ読み取りデータがありません。"}</div>`;
+      return;
+    }
+    body.innerHTML = filterHtml +
       `<div class="report-note">※ ダブルチェック完了分のみ集計しています。</div>
        <div class="report-cards">
-         <div class="rcard"><div class="n">${jnum(grand)}</div><div class="l">全体 確定着数</div></div>
-         <div class="rcard"><div class="n">${rows.length}</div><div class="l">店舗×日付</div></div>
+         <div class="rcard"><div class="n">${jnum(grand)}</div><div class="l">${filter ? esc(filter) + " 確定着数" : "全体 確定着数"}</div></div>
+         <div class="rcard"><div class="n">${rows.length}</div><div class="l">${filter ? "棚卸し（日付）" : "店舗×日付"}</div></div>
        </div>
        <ul class="report-list">` +
       rows.map((g) => `
@@ -1138,6 +1161,8 @@
     if (state.reportKey) {
       const { store, date } = state.reportKey;
       scans = scans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
+    } else if (state.reportStore) {
+      scans = scans.filter((sc) => storeKey(sc.store) === state.reportStore);
     }
     const rows = [["店舗", "棚卸日", "ロケーション", "ラック", "コード", "商品名", "カテゴリ", "単価", "数量"]];
     const sorted = [...scans].sort((a, b) =>
@@ -1148,7 +1173,7 @@
       const it = state.itemMap[sc.sku] || {};
       rows.push([storeKey(sc.store), scanDate(sc, dmap), baseLocation(sc.location), rackOf(sc.location), sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty]);
     });
-    const safe = (state.reportKey ? state.reportKey.store + "_" + state.reportKey.date : "全体").replace(/[^\w\-一-龠ぁ-んァ-ヶー]/g, "_");
+    const safe = (state.reportKey ? state.reportKey.store + "_" + state.reportKey.date : (state.reportStore || "全体")).replace(/[^\w\-一-龠ぁ-んァ-ヶー]/g, "_");
     download("tanaoroshi_" + safe + ".csv", toCSV(rows));
   }
 
@@ -1311,6 +1336,9 @@
       if (locEl) { const l = locEl.dataset.rloc; state.reportLoc = (state.reportLoc === l) ? "" : l; renderReport(); return; }
       const li = e.target.closest("[data-store]"); if (!li) return;
       state.reportKey = { store: li.dataset.store, date: li.dataset.date }; state.reportLoc = ""; renderReport();
+    });
+    $("#report-body").addEventListener("change", (e) => {
+      if (e.target.id === "report-store") { state.reportStore = e.target.value; renderReport(); }
     });
 
     // セッションモーダル
