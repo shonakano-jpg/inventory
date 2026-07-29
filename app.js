@@ -202,6 +202,7 @@
     const show = state.location === RACK_BASE;
     row.hidden = !show;
     $("#rack-status").hidden = !show;
+    $("#dc-open").hidden = !show;
     $("#rackprog-toggle").hidden = !show;
     $("#rackprog-panel").hidden = !show || !state.rackProgOpen;
     if (!show) return;
@@ -210,8 +211,14 @@
     // このセッションで既に使われた/ステータス登録済みの店内ラックを候補に
     const racks = rackNames();
     $("#rack-datalist").innerHTML = racks.map((r) => `<option value="${esc(r)}"></option>`).join("");
+    // 仮登録待ち件数
+    const provN = provisionalRacks().length;
+    const dcBtn = $("#dc-open");
+    dcBtn.textContent = `✅ 仮登録待ち（ダブルチェック）${provN ? " " + provN + "件" : ""}`;
+    dcBtn.disabled = state.rackTableMissing;
     renderRackStatus();
     if (state.rackProgOpen) renderRackProgress();
+    if (!$("#dc-modal").hidden) renderDcList();
   }
 
   // このセッションで登場した店内ラック名（読取済み＋ステータス登録済み）
@@ -224,45 +231,71 @@
 
   const rackQty = (rack) => state.scans.reduce((a, sc) => a + (baseLocation(sc.location) === RACK_BASE && rackOf(sc.location) === rack ? sc.qty : 0), 0);
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-  let rackCheckerDraft = ""; // ダブルチェック担当者の入力中テキスト（再描画で消えないよう保持）
 
-  // 現在入力中ラックの確認ステータス＋操作ボタン
+  // 現在入力中ラックの確認ステータス＋操作ボタン（仮登録する人の画面。ダブルチェックは別画面）
   function renderRackStatus() {
     const el = $("#rack-status"); if (!el) return;
-    // ダブルチェック担当者を入力中は再描画しない（入力が消えないように）
-    if (document.activeElement && document.activeElement.id === "rs-checker") return;
     if (state.rackTableMissing) {
       el.className = "rack-status warn";
       el.innerHTML = `⚠️ ラック確認機能はクラウド側の準備が必要です（設定→SQLを1回実行）。`;
       return;
     }
     const rack = (state.rack || "").trim();
-    if (!rack) { el.className = "rack-status"; el.innerHTML = `<span class="rs-hint">ラック名を入れると、仮登録／ダブルチェックの操作ができます。</span>`; return; }
+    if (!rack) { el.className = "rack-status"; el.innerHTML = `<span class="rs-hint">ラック名を入れて読み取り、終わったら「仮登録」を押してください。ダブルチェックは下の「仮登録待ち」から別の人が行います。</span>`; return; }
     const c = state.rackChecks[rack];
     const qty = rackQty(rack);
     const status = c ? c.status : "none";
     if (status === "checked") {
       el.className = "rack-status done";
       el.innerHTML = `<div class="rs-info">✅ <b>ダブルチェック完了</b>（${esc(c.checked_by || "?")} ${fmtTime(c.checked_at)}）<br>
-        <span class="rs-sub">仮登録: ${esc(c.first_by || "?")} ${fmtTime(c.first_at)} ・ ${qty}点</span></div>
+        <span class="rs-sub">仮登録: ${esc(c.first_by || "?")} ・ ${qty}点</span></div>
         <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>`;
     } else if (status === "provisional") {
       el.className = "rack-status prov";
-      el.innerHTML = `<div class="rs-info">🕒 <b>仮登録済み</b>（${esc(c.first_by || "?")} ${fmtTime(c.first_at)}）</div>
-        <div class="rs-verify">
-          <div class="rs-q">仮登録の着数は <b class="rs-qty">${qty}点</b> です。<br>この着数で合っていますか？</div>
-          <input id="rs-checker" class="rs-checker" placeholder="ダブルチェックした人の名前" autocomplete="off" />
-          <div class="rs-verify-btns">
-            <button class="btn btn-primary" data-rack-action="check">ダブルチェック完了</button>
-            <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>
-          </div>
-        </div>`;
-      const chk = $("#rs-checker"); if (chk) chk.value = rackCheckerDraft;
+      el.innerHTML = `<div class="rs-info">🕒 <b>仮登録済み</b>（${esc(c.first_by || "?")} ${fmtTime(c.first_at)} ・ ${qty}点）<br>
+        <span class="rs-sub">別の人が「仮登録待ち」からダブルチェックします</span></div>
+        <button class="btn btn-ghost rs-reset" data-rack-action="reset">取消</button>`;
     } else {
       el.className = "rack-status none";
       el.innerHTML = `<div class="rs-info">このラック「${esc(rack)}」：<b>未確認</b>（${qty}点）</div>
         <button class="btn btn-primary rs-prov" data-rack-action="prov">仮登録（1回目完了）</button>`;
     }
+  }
+
+  /* ---------- 仮登録待ち（別画面でダブルチェック） ---------- */
+  let dcDrafts = {}; // rack -> 確認者名の入力中テキスト
+  const provisionalRacks = () => Object.entries(state.rackChecks || {})
+    .filter(([, c]) => c && c.status === "provisional")
+    .map(([rack, c]) => ({ rack, c }))
+    .sort((a, b) => (a.c.first_at || "").localeCompare(b.c.first_at || ""));
+
+  function openDcModal() {
+    if (state.rackTableMissing) { toast("クラウド側の準備が必要です（設定→SQLを1回実行）"); return; }
+    $("#dc-modal").hidden = false;
+    renderDcList();
+  }
+  function closeDcModal() { $("#dc-modal").hidden = true; }
+  function renderDcList() {
+    const ul = $("#dc-list"); if (!ul) return;
+    // 名前を入力中は再描画しない（入力が消えないように）
+    if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("dc-checker")) return;
+    const rows = provisionalRacks();
+    if (!rows.length) { ul.innerHTML = `<li class="empty">仮登録待ちはありません。</li>`; return; }
+    ul.innerHTML = rows.map(({ rack, c }) => {
+      const qty = rackQty(rack);
+      return `<li class="dc-row" data-rack="${esc(rack)}">
+        <div class="dc-head">
+          <div class="dc-name">ラック <b>${esc(rack)}</b></div>
+          <div class="dc-qty">仮登録の着数 <b>${qty}点</b></div>
+        </div>
+        <div class="dc-sub">仮登録: ${esc(c.first_by || "?")} ${fmtTime(c.first_at)}</div>
+        <div class="dc-q">この着数で合っていますか？</div>
+        <div class="dc-act">
+          <input class="dc-checker" data-rack="${esc(rack)}" placeholder="確認した人の名前" value="${esc(dcDrafts[rack] || "")}" autocomplete="off" />
+          <button class="btn btn-primary dc-done" data-rack="${esc(rack)}">ダブルチェック完了</button>
+        </div>
+      </li>`;
+    }).join("");
   }
 
   // ラック進捗一覧（他の人の状況が見える）
@@ -294,27 +327,33 @@
     const who = requireStaff(); if (!who) return;
     try {
       await DB.setRackCheck(state.activeSessionId, rack, { status: "provisional", first_by: who, first_at: new Date().toISOString() });
-      haptic("ok"); toast(`「${rack}」を仮登録しました`);
-      state.rackChecks = await DB.getRackChecks(state.activeSessionId); renderRackRow();
+      haptic("ok"); toast(`「${rack}」を仮登録しました。次のラックへどうぞ`);
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId);
+      // 仮登録したら本人は次のラックへ → ラック欄をクリア
+      state.rack = ""; localStorage.setItem(LS_RACK, "");
+      const ri = $("#rack-input"); if (ri) ri.value = "";
+      renderRackRow();
     } catch (e) { toast("仮登録に失敗: " + (e.message || e)); }
   }
 
-  async function markRackChecked() {
-    if (!ensureEditable()) return;
-    const rack = (state.rack || "").trim(); if (!rack) return;
-    const inp = $("#rs-checker");
-    const who = (inp ? inp.value : rackCheckerDraft).trim();
-    if (!who) { toast("ダブルチェックした人の名前を入れてください"); if (inp) inp.focus(); return; }
+  // ダブルチェック完了（別画面「仮登録待ち」から任意のラックを確認）
+  async function markRackChecked(rack, who) {
+    if (!ensureEditable()) return false;
+    rack = (rack || "").trim(); who = (who || "").trim();
+    if (!rack) return false;
+    if (!who) { toast("確認した人の名前を入れてください"); return false; }
     const c = state.rackChecks[rack];
     if (c && c.first_by && c.first_by === who) {
-      if (!confirm("仮登録と同じ担当者です。ダブルチェックは別の人が推奨です。このまま完了にしますか？")) return;
+      if (!confirm("仮登録と同じ担当者です。ダブルチェックは別の人が推奨です。このまま完了にしますか？")) return false;
     }
     try {
       await DB.setRackCheck(state.activeSessionId, rack, { status: "checked", checked_by: who, checked_at: new Date().toISOString() });
-      rackCheckerDraft = "";
-      haptic("ok"); toast(`「${rack}」のダブルチェック完了（${who}）`);
-      state.rackChecks = await DB.getRackChecks(state.activeSessionId); renderRackRow();
-    } catch (e) { toast("完了処理に失敗: " + (e.message || e)); }
+      delete dcDrafts[rack];
+      haptic("ok"); toast(`ラック「${rack}」ダブルチェック完了（${who}）`);
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId);
+      renderRackRow(); if (!$("#dc-modal").hidden) renderDcList();
+      return true;
+    } catch (e) { toast("完了処理に失敗: " + (e.message || e)); return false; }
   }
 
   async function resetRack() {
@@ -789,6 +828,23 @@
     toast("セッションを作成しました");
   }
 
+  /* ---------- 起動時: 店舗（棚卸し）の選択 ---------- */
+  function openPickSession() {
+    renderPsList();
+    $("#pick-session-modal").hidden = false;
+  }
+  function closePickSession() { $("#pick-session-modal").hidden = true; }
+  function renderPsList() {
+    const ul = $("#ps-list"); if (!ul) return;
+    const list = state.sessions.filter((s) => s.status !== "final" && s.status !== "closed");
+    if (!list.length) { ul.innerHTML = `<li class="empty">続けられる棚卸しがありません。下のボタンで新しく始めてください。</li>`; return; }
+    ul.innerHTML = list.map((s) => `
+      <li class="ps-row row${s.id === state.activeSessionId ? " active" : ""}" data-sid="${esc(s.id)}">
+        <div class="row-main"><div class="row-name">${esc(s.store || "（店舗未設定）")}</div>
+        <div class="row-sub">🗓 ${esc(s.name || "")}${s.status === "provisional" ? " ・ 仮確定" : ""}</div></div>
+        <span class="chev">›</span></li>`).join("");
+  }
+
   /* ---------- 商品モーダル ---------- */
   function openItemModal(sku) {
     const it = sku ? state.itemMap[sku] : null;
@@ -921,6 +977,13 @@
     $("#session-select").addEventListener("change", (e) => setActiveSession(e.target.value));
     $("#new-session-btn").addEventListener("click", openSessionModal);
 
+    // 起動時の店舗選択
+    $("#ps-new").addEventListener("click", () => { closePickSession(); openSessionModal(); });
+    $("#ps-list").addEventListener("click", (e) => {
+      const li = e.target.closest("[data-sid]"); if (!li) return;
+      setActiveSession(li.dataset.sid); closePickSession();
+    });
+
     // 担当者名（スキャン画面から常時編集可・設定と同期）
     const staffInput = $("#staff-name");
     if (staffInput) {
@@ -950,16 +1013,27 @@
       rackInput.addEventListener("change", (e) => { saveRack(e); renderRackRow(); });
     }
 
-    // ラック確認ステータスの操作
-    $("#rack-status").addEventListener("input", (e) => {
-      if (e.target.id === "rs-checker") rackCheckerDraft = e.target.value;
-    });
+    // ラック確認ステータスの操作（仮登録／取消）
     $("#rack-status").addEventListener("click", (e) => {
       const a = e.target.closest("[data-rack-action]"); if (!a) return;
       const act = a.dataset.rackAction;
       if (act === "prov") markRackProvisional();
-      else if (act === "check") markRackChecked();
       else if (act === "reset") resetRack();
+    });
+
+    // 仮登録待ち（別画面でダブルチェック）
+    $("#dc-open").addEventListener("click", openDcModal);
+    $("#dc-close").addEventListener("click", closeDcModal);
+    $("#dc-modal").addEventListener("click", (e) => { if (e.target.id === "dc-modal") closeDcModal(); });
+    $("#dc-list").addEventListener("input", (e) => {
+      if (e.target.classList.contains("dc-checker")) dcDrafts[e.target.dataset.rack] = e.target.value;
+    });
+    $("#dc-list").addEventListener("click", (e) => {
+      const btn = e.target.closest(".dc-done"); if (!btn) return;
+      const rack = btn.dataset.rack;
+      const li = btn.closest(".dc-row");
+      const inp = li ? li.querySelector(".dc-checker") : null;
+      markRackChecked(rack, inp ? inp.value : (dcDrafts[rack] || ""));
     });
 
     // ラック進捗パネルの開閉
@@ -1117,6 +1191,9 @@
     await seedMasterIfEmpty();
     await seedStoresIfEmpty();
     await reload();
+    // 起動時に「どの店舗の棚卸しですか？」と聞く（複数店舗を同時に進める運用向け）
+    if (state.sessions.length) openPickSession();
+    else openSessionModal();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   }
   document.addEventListener("DOMContentLoaded", main);

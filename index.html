@@ -48,6 +48,7 @@
       <datalist id="rack-datalist"></datalist>
     </div>
     <div id="rack-status" class="rack-status" hidden></div>
+    <button id="dc-open" class="btn btn-secondary btn-wide dc-open" hidden>✅ 仮登録待ち（ダブルチェック）</button>
     <button id="rackprog-toggle" class="btn btn-ghost btn-wide rackprog-toggle" hidden>🗂 ラックの進捗を見る</button>
     <div id="rackprog-panel" class="rackprog-panel" hidden>
       <ul id="rackprog-list" class="rackprog-list"></ul>
@@ -176,6 +177,26 @@
 </nav>
 
 <!-- セッション作成モーダル -->
+<!-- 起動時: どの店舗の棚卸しか選ぶ -->
+<div id="pick-session-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>どの店舗の棚卸しですか？</h3>
+    <div class="muted" style="margin-bottom:8px">続ける棚卸しを選ぶか、新しく始めてください。</div>
+    <ul id="ps-list" class="ps-list"></ul>
+    <button id="ps-new" class="btn btn-primary btn-lg" style="width:100%;margin-top:10px">＋ 新しい店舗で始める</button>
+  </div>
+</div>
+
+<!-- 仮登録待ち（ダブルチェック）別画面 -->
+<div id="dc-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>仮登録待ち（ダブルチェック）</h3>
+    <div class="muted" style="margin-bottom:8px">別の人が着数を確認して「完了」を押してください。</div>
+    <ul id="dc-list" class="dc-list"></ul>
+    <div class="btn-row"><button id="dc-close" class="btn btn-ghost">閉じる</button></div>
+  </div>
+</div>
+
 <div id="session-modal" class="modal" hidden>
   <div class="modal-card">
     <h3>棚卸しセッションを作成</h3>
