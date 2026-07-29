@@ -831,6 +831,26 @@
       return `<h4 class="cat-title">${esc(cat)}（${jnum(catTotals[cat])}点）</h4>${barChart(priceSumOf(catScans), catTotals[cat], "price")}`;
     }).join("");
 
+    // ③ 確認済みの単位一覧（抜け漏れチェック）
+    // 店内=ラック別、BY/その他=まとめて。ダブルチェック完了（＝集計対象）の単位を列挙。
+    const rackSums = {}; // rack -> qty
+    inStore.forEach((sc) => { const r = rackOf(sc.location) || "（ラック名なし）"; rackSums[r] = (rackSums[r] || 0) + sc.qty; });
+    const rackRows = Object.entries(rackSums).sort((a, b) => a[0].localeCompare(b[0], "ja", { numeric: true }));
+    const rackListHtml = rackRows.length
+      ? `<ul class="unit-list">` + rackRows.map(([r, q]) =>
+          `<li class="unit-item"><span class="unit-name">✅ ラック ${esc(r)}</span><span class="unit-qty">${jnum(q)}点</span></li>`).join("") + `</ul>`
+      : `<div class="empty">確認済みのラックがありません。</div>`;
+    const locRow = (label, qty, has) =>
+      `<li class="unit-item ${has ? "" : "unit-missing"}"><span class="unit-name">${has ? "✅" : "⚠️"} ${esc(label)}</span><span class="unit-qty">${has ? jnum(qty) + "点" : "未確認"}</span></li>`;
+    const unitsHtml =
+      `<h4 class="chart-sub">店内（確認済みラック ${rackRows.length}本）</h4>
+       ${rackListHtml}
+       <h4 class="chart-sub">バックヤード・その他倉庫</h4>
+       <ul class="unit-list">
+         ${locRow("バックヤード", sumQty(byyard), byyard.length > 0)}
+         ${locRow("その他倉庫", sumQty(other), other.length > 0)}
+       </ul>`;
+
     body.innerHTML = subHtml +
       `<div class="report-note">※ ダブルチェック完了分のみ集計（店内はラックのダブルチェック完了が対象。BY/その他は全数）。</div>
        <h3 class="chart-title">① サマリー</h3>
@@ -844,7 +864,10 @@
        <h4 class="chart-sub">カテゴリ×価格帯 ランキング（上位5）</h4>
        ${rankingHtml}
        <h3 class="chart-title">② カテゴリごとの価格帯比率</h3>
-       ${perCatHtml}`;
+       ${perCatHtml}
+       <h3 class="chart-title">③ 確認済みの一覧（抜け漏れチェック）</h3>
+       <div class="report-note">ダブルチェック完了した場所だけが出ます。⚠️や、あるはずのラックが出ていない場合は未確認です。抜けがないか確認してください。</div>
+       ${unitsHtml}`;
   }
 
   // 横棒＋割合の簡易チャート
