@@ -30,6 +30,7 @@
   const LS_ACTIVE = "fi_active_session";
   const LS_LOC = "fi_location";
   const LS_RACK = "fi_rack";
+  const LS_PIN = "fi_login_pin";
 
   const state = {
     view: "home",
@@ -809,6 +810,7 @@
   /* === 設定 === */
   function renderSettings() {
     $("#device-name").value = DB.getDeviceName();
+    $("#login-pin").value = localStorage.getItem(LS_PIN) || "";
     renderStoreList();
     const { url, key } = DB.getSavedCreds();
     $("#sb-url").value = url; $("#sb-key").value = key;
@@ -948,6 +950,29 @@
     const staff = $("#ps-staff").value.trim();
     DB.setDeviceName(staff); syncStaff(staff);
     await createOrJoinSession(TEST_STORE, $("#ps-date").value.trim() || todayStr());
+  }
+
+  // 暗証番号でログイン → 情報入力せず、直前（最新）の棚卸し画面へ
+  function pinLogin() {
+    const saved = (localStorage.getItem(LS_PIN) || "").trim();
+    if (!saved) {
+      toast("暗証番号が未設定です。設定→「ログイン暗証番号」で設定してください。");
+      switchView("settings"); return;
+    }
+    const entered = prompt("暗証番号を入力してください");
+    if (entered == null) return;
+    if (entered.trim() !== saved) { toast("暗証番号が違います"); return; }
+    // 担当者名が入っていれば保存
+    const staff = $("#ps-staff").value.trim();
+    if (staff) { DB.setDeviceName(staff); syncStaff(staff); }
+    // 進める棚卸しを選ぶ（アクティブ→無ければ最新の未確定）
+    const openSessions = state.sessions.filter((s) => s.status !== "final" && s.status !== "closed");
+    let sess = openSessions.find((s) => s.id === state.activeSessionId)
+      || openSessions.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+    if (!sess) { toast("進められる棚卸しがありません。店舗・日付を選んで始めてください。"); return; }
+    setActiveSession(sess.id);
+    switchView("scan");
+    toast(`棚卸しに進みました（${sess.store || "（店舗未設定）"} / ${sess.name}）`);
   }
 
   function renderPsList() {
@@ -1092,6 +1117,7 @@
   /* ---------- イベント配線 ---------- */
   function wire() {
     $$(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
+    $("#home-btn").addEventListener("click", () => switchView("home"));
 
     $("#session-select").addEventListener("change", (e) => setActiveSession(e.target.value));
     $("#new-session-btn").addEventListener("click", openPickSession);
@@ -1099,6 +1125,7 @@
     // 起動ホーム（棚卸しを始める）
     $("#ps-staff").addEventListener("input", (e) => { DB.setDeviceName(e.target.value); syncStaff(e.target.value); });
     $("#ps-start").addEventListener("click", startFromHome);
+    $("#ps-pin").addEventListener("click", pinLogin);
     $("#ps-test").addEventListener("click", startTestSession);
     $("#ps-list").addEventListener("click", (e) => {
       const li = e.target.closest("[data-sid]"); if (!li) return;
@@ -1267,6 +1294,7 @@
 
     // 設定
     $("#device-name").addEventListener("change", (e) => { DB.setDeviceName(e.target.value); const s = $("#staff-name"); if (s) s.value = e.target.value; toast("担当者名を保存"); });
+    $("#login-pin").addEventListener("change", (e) => { const v = (e.target.value || "").trim(); if (v) localStorage.setItem(LS_PIN, v); else localStorage.removeItem(LS_PIN); toast(v ? "暗証番号を保存しました" : "暗証番号を無効にしました"); });
     $("#store-add-btn").addEventListener("click", async () => {
       const name = $("#store-name").value.trim();
       if (!name) { toast("店舗名を入力してください"); return; }

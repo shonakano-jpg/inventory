@@ -12,7 +12,8 @@
 <header class="topbar">
   <div class="topbar-title">古着棚卸し</div>
   <div class="topbar-right">
-    <a class="btn btn-ghost manual-link" href="manual.html" target="_blank" rel="noopener">❓ 使い方</a>
+    <button class="btn btn-ghost manual-link" id="home-btn" title="最初の画面へ">🏠 最初へ</button>
+    <a class="btn btn-ghost manual-link" href="manual.html" target="_blank" rel="noopener">❓</a>
     <div id="conn-badge" class="badge badge-local" title="接続状態">ローカル</div>
   </div>
 </header>
@@ -33,6 +34,7 @@
     </label>
     <div id="ps-error" class="ps-error" hidden></div>
     <button id="ps-start" class="btn btn-primary btn-lg" style="width:100%;margin-top:4px">▶ この店舗・日付で始める</button>
+    <button id="ps-pin" class="btn btn-secondary btn-wide" style="width:100%;margin-top:8px">🔑 暗証番号でログイン（入力せずに棚卸し画面へ）</button>
     <button id="ps-test" class="btn btn-ghost btn-wide" style="width:100%;margin-top:8px">🧪 テスト店舗で始める</button>
 
     <h3 class="home-sub">④ 入力中の棚卸し</h3>
@@ -154,6 +156,12 @@
       <h3>担当者名</h3>
       <p class="muted">複数人で棚卸しするとき、誰が読み取ったかを記録します。</p>
       <input id="device-name" class="search" placeholder="例：田中" />
+    </div>
+
+    <div class="setting-group">
+      <h3>ログイン暗証番号</h3>
+      <p class="muted">最初の画面の「🔑 暗証番号でログイン」で使います。設定すると、店舗・日付を入力せずに直前（最新）の棚卸し画面へ進めます。空にすると無効。</p>
+      <input id="login-pin" class="search" inputmode="numeric" placeholder="例：1234（この端末に保存）" autocomplete="off" />
     </div>
 
     <div class="setting-group">
