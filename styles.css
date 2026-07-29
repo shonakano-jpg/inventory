@@ -78,6 +78,11 @@ select { appearance: none; }
   background: #10331f; border: 1px solid #1f5a37; color: #7ee2a8;
   border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 600; margin: 0 0 10px;
 }
+.offline-banner {
+  background: #3a1414; border: 1px solid #8a2a2a; color: #ffb4b4;
+  border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 700; margin: 0 0 10px; line-height: 1.5;
+}
+.offline-banner b { color: #fff; }
 .recent-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 18px 0 8px; }
 .recent-head .list-title { margin: 0; }
 .recent-actions { display: flex; gap: 8px; }

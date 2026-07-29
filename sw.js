@@ -2,7 +2,7 @@
    - 自アプリのファイル(HTML/CSS/JS)は network-first（更新を確実に反映、オフライン時のみキャッシュ）
    - 外部ライブラリ(unpkg)は cache-first（変わらないので高速化）
 */
-const CACHE = "furugi-tanaoroshi-v41";
+const CACHE = "furugi-tanaoroshi-v42";
 const ASSETS = [
   "./", "./index.html", "./manual.html", "./styles.css",
   "./config.js", "./db.js", "./scanner.js", "./app.js",
