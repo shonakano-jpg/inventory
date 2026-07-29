@@ -47,7 +47,8 @@
     reportKey: null, // 選択中の店舗×日付グループ { store, date }（null=一覧）
     reportLoc: "", // 詳細でのロケーション絞り込み（""=全体）
     lastScan: null, // 直前の読取（取消用）: { sku, location, qty }
-    rackChecks: {}, // { rack: {status, first_by, first_at, checked_by, checked_at} }
+    rackChecks: {}, // { rack: {...} } アクティブセッションのラック確認
+    allRackChecks: {}, // { "session_id|rack": {...} } レポート用（全セッション）
     rackTableMissing: false,
     rackProgOpen: false,
   };
@@ -164,6 +165,7 @@
         try { state.rackChecks = await DB.getRackChecks(state.activeSessionId); state.rackTableMissing = false; }
         catch (e2) { state.rackChecks = {}; state.rackTableMissing = true; console.warn("rack_checks 未作成の可能性:", e2.message || e2); }
       } else { state.rackChecks = {}; }
+      try { state.allRackChecks = await DB.getAllRackChecks(); } catch { state.allRackChecks = {}; }
     } catch (e) { console.error(e); toast("読込エラー: " + (e.message || e)); }
     finally { loading = false; }
     render();
@@ -654,6 +656,29 @@
     else { back.hidden = true; title.textContent = "棚卸しレポート（店舗×日付）"; renderGroupOverview(body); }
   }
 
+  // レポートは「ダブルチェック完了」分のみ反映。
+  // 店内はラックのダブルチェック完了が対象（ラック未設定の店内は未確認＝除外）。
+  // バックヤード/その他倉庫はラック確認の対象外なので全数を計上。
+  function scanConfirmed(sc) {
+    if (baseLocation(sc.location) !== "店内在庫") return true;
+    const rack = rackOf(sc.location);
+    if (!rack) return false;
+    const c = state.allRackChecks[sc.session_id + "|" + rack];
+    return !!(c && c.status === "checked");
+  }
+  const sumQty = (arr) => arr.reduce((a, x) => a + x.qty, 0);
+  const priceLabel = (it) => (it && it.price != null && it.price !== "" ? "¥" + jnum(Number(it.price)) : "不明");
+  function catSumOf(scans) {
+    const m = {};
+    scans.forEach((sc) => { const it = state.itemMap[sc.sku]; const c = it ? (it.category || "未分類") : "マスタ外"; m[c] = (m[c] || 0) + sc.qty; });
+    return m;
+  }
+  function priceSumOf(scans) {
+    const m = {};
+    scans.forEach((sc) => { m[priceLabel(state.itemMap[sc.sku])] = (m[priceLabel(state.itemMap[sc.sku])] || 0) + sc.qty; });
+    return m;
+  }
+
   // 一覧（店舗×日付ごとの合計点数）
   function renderGroupOverview(body) {
     const dmap = sessionDateMap();
@@ -661,15 +686,17 @@
     state.allScans.forEach((sc) => {
       const store = storeKey(sc.store), date = scanDate(sc, dmap);
       const key = store + " " + date;
-      (groups[key] = groups[key] || { store, date, qty: 0 }).qty += sc.qty;
+      const g = (groups[key] = groups[key] || { store, date, qty: 0 });
+      if (scanConfirmed(sc)) g.qty += sc.qty;
     });
     const rows = Object.values(groups).sort((a, b) =>
       a.store.localeCompare(b.store, "ja") || b.date.localeCompare(a.date));
     const grand = rows.reduce((a, r) => a + r.qty, 0);
     if (!rows.length) { body.innerHTML = `<div class="empty">まだ読み取りデータがありません。</div>`; return; }
     body.innerHTML =
-      `<div class="report-cards">
-         <div class="rcard"><div class="n">${jnum(grand)}</div><div class="l">全体 総点数</div></div>
+      `<div class="report-note">※ ダブルチェック完了分のみ集計しています。</div>
+       <div class="report-cards">
+         <div class="rcard"><div class="n">${jnum(grand)}</div><div class="l">全体 確定着数</div></div>
          <div class="rcard"><div class="n">${rows.length}</div><div class="l">店舗×日付</div></div>
        </div>
        <ul class="report-list">` +
@@ -686,62 +713,72 @@
     const { store, date } = state.reportKey;
     title.textContent = store;
     const dmap = sessionDateMap();
-    const groupScans = state.allScans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
-    const total = groupScans.reduce((a, x) => a + x.qty, 0);
+    const groupAll = state.allScans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
+    const scans = groupAll.filter(scanConfirmed); // ダブルチェック完了分のみ
+    const inStore = scans.filter((sc) => baseLocation(sc.location) === "店内在庫");
+    const byyard = scans.filter((sc) => baseLocation(sc.location) === "バックヤード在庫");
+    const other = scans.filter((sc) => baseLocation(sc.location) === "その他倉庫");
+    const total = sumQty(scans);
 
-    // ロケーション内訳（大分類）
-    const locSum = {}; LOCATIONS.forEach((l) => (locSum[l] = 0));
-    groupScans.forEach((sc) => { const b = baseLocation(sc.location); locSum[b] = (locSum[b] || 0) + sc.qty; });
-
-    // 絞り込み対象（""=全体）
-    const sel = state.reportLoc;
-    const scans = sel ? groupScans.filter((sc) => baseLocation(sc.location) === sel) : groupScans;
-    const secTotal = scans.reduce((a, x) => a + x.qty, 0);
-
-    // カテゴリ比率・価格帯比率（絞り込み後）
-    const catSum = {}, priceSum = {};
-    scans.forEach((sc) => {
-      const it = state.itemMap[sc.sku];
-      const c = it ? (it.category || "未分類") : "マスタ外";
-      catSum[c] = (catSum[c] || 0) + sc.qty;
-      const p = it && it.price != null && it.price !== "" ? "¥" + jnum(Number(it.price)) : "不明";
-      priceSum[p] = (priceSum[p] || 0) + sc.qty;
-    });
-
-    const totalCard = `<div class="rcard rcard-total${sel === "" ? " active" : ""}" data-rloc=""><div class="n">${jnum(total)}</div><div class="l">合計</div></div>`;
-    const locCards = LOCATIONS.map((l) =>
-      `<div class="rcard rcard-loc${sel === l ? " active" : ""}" data-rloc="${esc(l)}"><div class="n">${jnum(locSum[l] || 0)}</div><div class="l">${l}</div></div>`).join("");
-
-    // 店内選択時: ラック別 着数
-    let rackHtml = "";
-    if (sel === "店内在庫") {
-      const rackSum = {};
-      groupScans.forEach((sc) => {
-        if (baseLocation(sc.location) === "店内在庫") { const r = rackOf(sc.location) || "（ラック未設定）"; rackSum[r] = (rackSum[r] || 0) + sc.qty; }
-      });
-      const has = Object.values(rackSum).some((v) => v > 0);
-      rackHtml = `<h3 class="chart-title">ラック別 着数</h3>` +
-        (has ? barChart(rackSum, locSum["店内在庫"] || 0, "rack") : `<div class="empty">ラックのデータがありません（店内でラック名を入れて登録すると集計されます）。</div>`);
-    }
-
-    // 本確定（変更不可）状態：このグループのセッション
+    // 本確定（変更不可）状態
     const groupSessions = reportGroupSessions();
     const allFinal = groupSessions.length > 0 && groupSessions.every((s) => s.status === "final" || s.status === "closed");
     const finalizeHtml = allFinal
       ? `<span class="fin-badge">🔒 本確定済み（変更不可）</span><button id="unfinalize-btn" class="btn btn-ghost sm">解除</button>`
       : `<button id="finalize-btn" class="btn btn-primary">本確定（変更不可にする）</button>`;
+    const subHtml = `<div class="report-sub">🏬 ${esc(store)}　🗓 ${esc(date)}</div><div class="report-finalize">${finalizeHtml}</div>`;
 
-    const heading = sel ? `${sel}の内訳` : "全体の内訳";
-    body.innerHTML =
-      `<div class="report-sub">🏬 ${esc(store)}　🗓 ${esc(date)}</div>
-       <div class="report-finalize">${finalizeHtml}</div>
-       <div class="report-cards report-cards-4">${totalCard}${locCards}</div>
-       <div class="report-hint">↑ ロケーションをタップで内訳を切替${sel ? "（合計で全体に戻る）" : ""}</div>
-       ${rackHtml}
-       <h3 class="chart-title">${esc(heading)}・カテゴリ比率</h3>
-       ${barChart(catSum, secTotal, "cat")}
-       <h3 class="chart-title">${esc(heading)}・価格帯比率</h3>
-       ${barChart(priceSum, secTotal, "price")}`;
+    if (!scans.length) {
+      body.innerHTML = subHtml +
+        `<div class="empty">ダブルチェック完了分がまだありません。<br>店内は「確認待ち」タブでラックのダブルチェックを完了すると集計されます。</div>`;
+      return;
+    }
+
+    // ①-1 サマリーカード
+    const cards =
+      `<div class="report-cards report-cards-4">
+         <div class="rcard rcard-total"><div class="n">${jnum(total)}</div><div class="l">合計着数</div></div>
+         <div class="rcard"><div class="n">${jnum(sumQty(inStore))}</div><div class="l">店内</div></div>
+         <div class="rcard"><div class="n">${jnum(sumQty(byyard))}</div><div class="l">バックヤード</div></div>
+         <div class="rcard"><div class="n">${jnum(sumQty(other))}</div><div class="l">その他倉庫</div></div>
+       </div>`;
+
+    // ①-5 カテゴリ×価格帯 ランキング上位5
+    const cpMap = {};
+    scans.forEach((sc) => {
+      const it = state.itemMap[sc.sku];
+      const cat = it ? (it.category || "未分類") : "マスタ外";
+      const key = cat + " / " + priceLabel(it);
+      cpMap[key] = (cpMap[key] || 0) + sc.qty;
+    });
+    const ranking = Object.entries(cpMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const rankingHtml = ranking.length
+      ? `<ol class="rank-list">` + ranking.map(([label, qty]) =>
+          `<li class="rank-item"><span class="rank-label">${esc(label)}</span><span class="rank-qty">${jnum(qty)}点</span></li>`).join("") + `</ol>`
+      : `<div class="empty">データなし</div>`;
+
+    // ② カテゴリごとの価格帯比率
+    const catTotals = catSumOf(scans);
+    const catsOrdered = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).map(([c]) => c);
+    const perCatHtml = catsOrdered.map((cat) => {
+      const catScans = scans.filter((sc) => { const it = state.itemMap[sc.sku]; const c = it ? (it.category || "未分類") : "マスタ外"; return c === cat; });
+      return `<h4 class="cat-title">${esc(cat)}（${jnum(catTotals[cat])}点）</h4>${barChart(priceSumOf(catScans), catTotals[cat], "price")}`;
+    }).join("");
+
+    body.innerHTML = subHtml +
+      `<div class="report-note">※ ダブルチェック完了分のみ集計（店内はラックのダブルチェック完了が対象。BY/その他は全数）。</div>
+       <h3 class="chart-title">① サマリー</h3>
+       ${cards}
+       <h4 class="chart-sub">全体のカテゴリ比率</h4>
+       ${barChart(catSumOf(scans), total, "cat")}
+       <h4 class="chart-sub">店内のカテゴリ比率</h4>
+       ${barChart(catSumOf(inStore), sumQty(inStore), "cat")}
+       <h4 class="chart-sub">店内の価格帯比率</h4>
+       ${barChart(priceSumOf(inStore), sumQty(inStore), "price")}
+       <h4 class="chart-sub">カテゴリ×価格帯 ランキング（上位5）</h4>
+       ${rankingHtml}
+       <h3 class="chart-title">② カテゴリごとの価格帯比率</h3>
+       ${perCatHtml}`;
   }
 
   // 横棒＋割合の簡易チャート
@@ -850,9 +887,14 @@
   function openPickSession() {
     const cur = activeSession();
     $("#ps-staff").value = DB.getDeviceName() || "";
-    $("#ps-store").value = cur ? (cur.store || "") : "";
+    // ② 店舗は設定で登録済みの店舗のみをリスト表示
+    const stores = state.stores.map((s) => s.name);
+    const sel = $("#ps-store");
+    sel.innerHTML = stores.length
+      ? stores.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")
+      : `<option value="">（設定で店舗を登録してください）</option>`;
+    if (cur && cur.store && stores.includes(cur.store)) sel.value = cur.store;
     $("#ps-date").value = todayStr();
-    $("#ps-store-list").innerHTML = knownStores().map((s) => `<option value="${esc(s)}"></option>`).join("");
     hidePsError();
     renderPsList();
     $("#pick-session-modal").hidden = false;
@@ -861,15 +903,10 @@
   function showPsError(msg) { const e = $("#ps-error"); if (e) { e.textContent = msg; e.hidden = false; } }
   function hidePsError() { const e = $("#ps-error"); if (e) e.hidden = true; }
 
-  // ホームから開始（②店舗③日付）。同じ店舗×日付が既にあれば作らずエラー表示。
-  async function startFromHome() {
-    const staff = $("#ps-staff").value.trim();
-    DB.setDeviceName(staff); syncStaff(staff);
-    const store = $("#ps-store").value.trim();
-    const date = $("#ps-date").value.trim() || todayStr();
-    if (!store) { showPsError("店舗を入力してください"); $("#ps-store").focus(); return; }
+  // 同じ店舗×日付が既にあれば作らずエラー表示。無ければ作成して参加。
+  async function createOrJoinSession(store, date) {
+    date = (date || "").trim() || todayStr();
     hidePsError();
-    // 最新のセッションを取り直して重複チェック（他の人が作っていないか）
     try { state.sessions = await DB.getSessions(); } catch {}
     const dup = state.sessions.find((s) => (s.store || "") === store && (s.name || "") === date && s.status !== "final" && s.status !== "closed");
     if (dup) {
@@ -890,10 +927,20 @@
     } catch (e) { showPsError("作成に失敗: " + (e.message || e)); }
   }
 
+  // ホームから開始（②店舗③日付）
+  async function startFromHome() {
+    const staff = $("#ps-staff").value.trim();
+    DB.setDeviceName(staff); syncStaff(staff);
+    const store = $("#ps-store").value.trim();
+    const date = $("#ps-date").value.trim() || todayStr();
+    if (!store) { showPsError("店舗を選んでください（設定で登録できます）"); return; }
+    await createOrJoinSession(store, date);
+  }
+
   async function startTestSession() {
-    $("#ps-store").value = TEST_STORE;
-    $("#ps-date").value = todayStr();
-    await startFromHome();
+    const staff = $("#ps-staff").value.trim();
+    DB.setDeviceName(staff); syncStaff(staff);
+    await createOrJoinSession(TEST_STORE, $("#ps-date").value.trim() || todayStr());
   }
 
   function renderPsList() {
@@ -1017,7 +1064,7 @@
   function exportReportCSV() {
     // レポート表示中の範囲を出力（店舗×日付を選択中はその範囲、一覧なら全体）
     const dmap = sessionDateMap();
-    let scans = state.allScans;
+    let scans = state.allScans.filter(scanConfirmed); // ダブルチェック完了分のみ
     if (state.reportKey) {
       const { store, date } = state.reportKey;
       scans = scans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
