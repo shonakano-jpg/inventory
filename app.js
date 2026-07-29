@@ -11,6 +11,7 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const LOCATIONS = ["店内在庫", "バックヤード在庫", "その他倉庫"];
+  const TEST_STORE = "テスト店舗"; // 動作確認用の店舗（選択肢に常に出す）
   const RACK_SEP = "｜"; // location に「店内在庫｜<ラック名>」の形でラックを含める（スキーマ変更なし）
   const RACK_BASE = "店内在庫"; // ラック選択の対象は店内のみ
   const baseLocation = (loc) => String(loc || "").split(RACK_SEP)[0];
@@ -181,6 +182,7 @@
   function knownStores() {
     const set = new Set(state.stores.map((s) => s.name));
     state.sessions.forEach((s) => { if (s.store) set.add(s.store); });
+    set.add(TEST_STORE); // 動作確認用の店舗を常に候補に
     return Array.from(set);
   }
 
@@ -834,6 +836,25 @@
     $("#pick-session-modal").hidden = false;
   }
   function closePickSession() { $("#pick-session-modal").hidden = true; }
+  // テスト用の店舗ですぐ始める（今日のセッションを再利用 or 作成）
+  async function startTestSession() {
+    const store = TEST_STORE;
+    const name = new Date().toISOString().slice(0, 10);
+    let sess = state.sessions.find((s) => s.store === store && s.name === name && s.status !== "final" && s.status !== "closed");
+    try {
+      if (!sess) {
+        if (!state.stores.some((s) => s.name === store)) {
+          await DB.upsertStore({ name: store, brand: "テスト", area: "" });
+          state.stores = await DB.getStores();
+        }
+        sess = await DB.createSession(name, store);
+        state.sessions = await DB.getSessions();
+      }
+      closePickSession();
+      setActiveSession(sess.id);
+      toast("テスト店舗の棚卸しを開始しました");
+    } catch (e) { toast("開始に失敗: " + (e.message || e)); }
+  }
   function renderPsList() {
     const ul = $("#ps-list"); if (!ul) return;
     const list = state.sessions.filter((s) => s.status !== "final" && s.status !== "closed");
@@ -979,6 +1000,7 @@
 
     // 起動時の店舗選択
     $("#ps-new").addEventListener("click", () => { closePickSession(); openSessionModal(); });
+    $("#ps-test").addEventListener("click", startTestSession);
     $("#ps-list").addEventListener("click", (e) => {
       const li = e.target.closest("[data-sid]"); if (!li) return;
       setActiveSession(li.dataset.sid); closePickSession();
