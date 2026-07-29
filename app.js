@@ -348,7 +348,7 @@
       // 仮登録したら本人は次のラックへ → ラック欄をクリア
       state.rack = ""; localStorage.setItem(LS_RACK, "");
       const ri = $("#rack-input"); if (ri) ri.value = "";
-      renderRackRow();
+      renderScan(); renderCheckBadge(); // 最近の読取から仮登録分を消す（リセット）
     } catch (e) { toast("仮登録に失敗: " + (e.message || e)); }
   }
 
@@ -369,6 +369,7 @@
       state.rackChecks = await DB.getRackChecks(state.activeSessionId);
       renderRackRow(); renderCheckBadge();
       if (state.view === "check") renderDcList();
+      if (state.view === "scan") renderScan();
       return true;
     } catch (e) { toast("完了処理に失敗: " + (e.message || e)); return false; }
   }
@@ -379,7 +380,8 @@
     try {
       await DB.removeRackCheck(state.activeSessionId, rack);
       toast(`「${rack}」の確認ステータスを取消しました`);
-      state.rackChecks = await DB.getRackChecks(state.activeSessionId); renderRackRow();
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId);
+      renderScan(); renderCheckBadge();
     } catch (e) { toast("取消に失敗: " + (e.message || e)); }
   }
 
@@ -411,12 +413,36 @@
     $("#stat-kinds").textContent = kinds;
     $("#stat-unknown").textContent = unknown;
 
+    renderRecentList(locked);
+  }
+
+  // 店内で仮登録／ダブルチェック済みのラックの読取か（＝最近の読取から消す対象）
+  function isRackRegistered(sc) {
+    if (baseLocation(sc.location) !== "店内在庫") return false;
+    const rack = rackOf(sc.location); if (!rack) return false;
+    const c = state.rackChecks[rack];
+    return !!(c && (c.status === "provisional" || c.status === "checked"));
+  }
+
+  // 最近の読取（店内 / バックヤード / その他倉庫 に分割。店内は仮登録するとリセット＝非表示）
+  function renderRecentList(locked) {
     const list = $("#recent-list");
+    const groups = { "店内在庫": [], "バックヤード在庫": [], "その他倉庫": [] };
+    let shown = 0;
+    state.scans.forEach((sc) => {
+      const base = baseLocation(sc.location);
+      if (base === "店内在庫" && isRackRegistered(sc)) return; // 仮登録済みは非表示
+      if (groups[base]) { groups[base].push(sc); shown++; }
+    });
     if (!state.scans.length) {
       list.innerHTML = `<li class="empty">まだ読み取りがありません。<br>上でロケーションを選び「カメラ開始」。</li>`;
       return;
     }
-    list.innerHTML = state.scans.slice(0, 40).map((sc) => {
+    if (!shown) {
+      list.innerHTML = `<li class="empty">表示する読取はありません。<br>（店内は仮登録すると最近の読取から消えます）</li>`;
+      return;
+    }
+    const rowHtml = (sc) => {
       const it = state.itemMap[sc.sku];
       const name = it ? esc(it.name || "(名称なし)") : "マスタ外の商品";
       const pill = it ? `<span class="pill pill-ok">一致</span>` : `<span class="pill pill-new">マスタ外</span>`;
@@ -428,6 +454,12 @@
         <div class="row-sub"><span class="loc-tag">${esc(locLabel(sc.location))}</span> ${esc(sc.sku)}${sc.device ? " · " + esc(sc.device) : ""}</div></div>
         <span class="row-qty">×${sc.qty}</span>
         ${actions}</li>`;
+    };
+    const secLabel = { "店内在庫": "店内", "バックヤード在庫": "バックヤード", "その他倉庫": "その他倉庫" };
+    list.innerHTML = LOCATIONS.map((key) => {
+      const arr = groups[key]; if (!arr.length) return "";
+      const q = arr.reduce((a, s) => a + s.qty, 0);
+      return `<li class="recent-sec">${secLabel[key]}（${arr.length}品目・${q}点）</li>` + arr.slice(0, 40).map(rowHtml).join("");
     }).join("");
   }
 
