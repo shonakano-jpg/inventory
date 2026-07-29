@@ -48,7 +48,6 @@
       <datalist id="rack-datalist"></datalist>
     </div>
     <div id="rack-status" class="rack-status" hidden></div>
-    <button id="dc-open" class="btn btn-secondary btn-wide dc-open" hidden>✅ 仮登録待ち（ダブルチェック）</button>
     <button id="rackprog-toggle" class="btn btn-ghost btn-wide rackprog-toggle" hidden>🗂 ラックの進捗を見る</button>
     <div id="rackprog-panel" class="rackprog-panel" hidden>
       <ul id="rackprog-list" class="rackprog-list"></ul>
@@ -90,8 +89,16 @@
     <ul id="recent-list" class="recent-list"></ul>
   </section>
 
-  <!-- ===== マスタ ===== -->
+  <!-- ===== 確認待ち（ダブルチェック） ===== -->
+  <section id="view-check" class="view">
+    <h2 class="view-title">確認待ち（ダブルチェック）</h2>
+    <div id="check-sub" class="muted" style="margin-bottom:8px"></div>
+    <ul id="dc-list" class="dc-list"></ul>
+  </section>
+
+  <!-- ===== マスタ（設定内の機能） ===== -->
   <section id="view-master" class="view">
+    <button id="master-back" class="btn btn-ghost" style="margin-bottom:10px">← 設定に戻る</button>
     <div class="toolbar">
       <input id="master-search" class="search" placeholder="コード・カテゴリで検索" />
       <button id="master-add-btn" class="btn btn-primary">＋商品</button>
@@ -116,6 +123,12 @@
 
   <!-- ===== 設定 ===== -->
   <section id="view-settings" class="view">
+    <div class="setting-group">
+      <h3>商品マスタ</h3>
+      <p class="muted">インハウスコード（カテゴリ×価格）の一覧。商品の追加・編集・CSV取込／書出ができます。</p>
+      <button id="open-master" class="btn btn-primary btn-wide">📦 商品マスタを開く</button>
+    </div>
+
     <div class="setting-group">
       <h3>担当者名</h3>
       <p class="muted">複数人で棚卸しするとき、誰が読み取ったかを記録します。</p>
@@ -171,7 +184,7 @@
 
 <nav class="tabbar">
   <button class="tab active" data-view="scan"><span class="tab-ic">▣</span>スキャン</button>
-  <button class="tab" data-view="master"><span class="tab-ic">≣</span>マスタ</button>
+  <button class="tab" data-view="check"><span class="tab-ic">✅</span>確認待ち<span id="check-badge" class="tab-badge" hidden></span></button>
   <button class="tab" data-view="report"><span class="tab-ic">◪</span>レポート</button>
   <button class="tab" data-view="settings"><span class="tab-ic">⚙</span>設定</button>
 </nav>
@@ -185,16 +198,6 @@
     <ul id="ps-list" class="ps-list"></ul>
     <button id="ps-new" class="btn btn-primary btn-lg" style="width:100%;margin-top:10px">＋ 新しい店舗で始める</button>
     <button id="ps-test" class="btn btn-ghost btn-wide" style="width:100%;margin-top:8px">🧪 テスト店舗で始める</button>
-  </div>
-</div>
-
-<!-- 仮登録待ち（ダブルチェック）別画面 -->
-<div id="dc-modal" class="modal" hidden>
-  <div class="modal-card">
-    <h3>仮登録待ち（ダブルチェック）</h3>
-    <div class="muted" style="margin-bottom:8px">別の人が着数を確認して「完了」を押してください。</div>
-    <ul id="dc-list" class="dc-list"></ul>
-    <div class="btn-row"><button id="dc-close" class="btn btn-ghost">閉じる</button></div>
   </div>
 </div>
 

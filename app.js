@@ -140,9 +140,11 @@
   function switchView(v) {
     state.view = v;
     $$(".view").forEach((el) => el.classList.toggle("active", el.id === "view-" + v));
-    $$(".tab").forEach((el) => el.classList.toggle("active", el.dataset.view === v));
+    // マスタは設定内の機能なので、マスタ表示中は「設定」タブを点灯
+    const tabFor = (v === "master") ? "settings" : v;
+    $$(".tab").forEach((el) => el.classList.toggle("active", el.dataset.view === tabFor));
     render();
-    if (v === "report") reload(); // レポートは常に最新の全店データを取り直す
+    if (v === "report" || v === "check") reload(); // 最新データを取り直す
   }
 
   /* ---------- データ再取得 ---------- */
@@ -189,10 +191,30 @@
   /* ---------- 描画 ---------- */
   function render() {
     renderBadge();
+    renderCheckBadge();
     if (state.view === "scan") renderScan();
+    else if (state.view === "check") renderCheckView();
     else if (state.view === "master") renderMaster();
     else if (state.view === "report") renderReport();
     else if (state.view === "settings") renderSettings();
+  }
+
+  // 「確認待ち」タブの件数バッジ
+  function renderCheckBadge() {
+    const b = $("#check-badge"); if (!b) return;
+    const n = state.rackTableMissing ? 0 : provisionalRacks().length;
+    if (n > 0) { b.textContent = n; b.hidden = false; } else { b.hidden = true; }
+  }
+
+  // 確認待ち（ダブルチェック）ビュー
+  function renderCheckView() {
+    const sub = $("#check-sub");
+    if (sub) {
+      const s = activeSession();
+      if (state.rackTableMissing) sub.textContent = "クラウド側の準備が必要です（設定→SQLを1回実行）。";
+      else sub.textContent = s ? `${s.store || "（店舗未設定）"} / ${s.name} の仮登録待ち` : "棚卸しを選んでください。";
+    }
+    renderDcList();
   }
 
   /* === スキャン === */
@@ -204,7 +226,6 @@
     const show = state.location === RACK_BASE;
     row.hidden = !show;
     $("#rack-status").hidden = !show;
-    $("#dc-open").hidden = !show;
     $("#rackprog-toggle").hidden = !show;
     $("#rackprog-panel").hidden = !show || !state.rackProgOpen;
     if (!show) return;
@@ -213,14 +234,8 @@
     // このセッションで既に使われた/ステータス登録済みの店内ラックを候補に
     const racks = rackNames();
     $("#rack-datalist").innerHTML = racks.map((r) => `<option value="${esc(r)}"></option>`).join("");
-    // 仮登録待ち件数
-    const provN = provisionalRacks().length;
-    const dcBtn = $("#dc-open");
-    dcBtn.textContent = `✅ 仮登録待ち（ダブルチェック）${provN ? " " + provN + "件" : ""}`;
-    dcBtn.disabled = state.rackTableMissing;
     renderRackStatus();
     if (state.rackProgOpen) renderRackProgress();
-    if (!$("#dc-modal").hidden) renderDcList();
   }
 
   // このセッションで登場した店内ラック名（読取済み＋ステータス登録済み）
@@ -271,12 +286,6 @@
     .map(([rack, c]) => ({ rack, c }))
     .sort((a, b) => (a.c.first_at || "").localeCompare(b.c.first_at || ""));
 
-  function openDcModal() {
-    if (state.rackTableMissing) { toast("クラウド側の準備が必要です（設定→SQLを1回実行）"); return; }
-    $("#dc-modal").hidden = false;
-    renderDcList();
-  }
-  function closeDcModal() { $("#dc-modal").hidden = true; }
   function renderDcList() {
     const ul = $("#dc-list"); if (!ul) return;
     // 名前を入力中は再描画しない（入力が消えないように）
@@ -353,7 +362,8 @@
       delete dcDrafts[rack];
       haptic("ok"); toast(`ラック「${rack}」ダブルチェック完了（${who}）`);
       state.rackChecks = await DB.getRackChecks(state.activeSessionId);
-      renderRackRow(); if (!$("#dc-modal").hidden) renderDcList();
+      renderRackRow(); renderCheckBadge();
+      if (state.view === "check") renderDcList();
       return true;
     } catch (e) { toast("完了処理に失敗: " + (e.message || e)); return false; }
   }
@@ -1043,10 +1053,7 @@
       else if (act === "reset") resetRack();
     });
 
-    // 仮登録待ち（別画面でダブルチェック）
-    $("#dc-open").addEventListener("click", openDcModal);
-    $("#dc-close").addEventListener("click", closeDcModal);
-    $("#dc-modal").addEventListener("click", (e) => { if (e.target.id === "dc-modal") closeDcModal(); });
+    // 確認待ち（ダブルチェック）タブのリスト操作
     $("#dc-list").addEventListener("input", (e) => {
       if (e.target.classList.contains("dc-checker")) dcDrafts[e.target.dataset.rack] = e.target.value;
     });
@@ -1129,6 +1136,8 @@
     $("#qty-modal").addEventListener("click", (e) => { if (e.target.id === "qty-modal") closeQtyModal(); });
 
     $("#master-search").addEventListener("input", renderMaster);
+    $("#open-master").addEventListener("click", () => switchView("master"));
+    $("#master-back").addEventListener("click", () => switchView("settings"));
     $("#master-add-btn").addEventListener("click", () => openItemModal(""));
     $("#master-list").addEventListener("click", (e) => {
       const li = e.target.closest("[data-edit]"); if (li) openItemModal(li.dataset.edit);

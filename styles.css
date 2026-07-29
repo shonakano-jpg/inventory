@@ -283,6 +283,11 @@ select { appearance: none; }
   padding: 8px 0 10px; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
 .tab.active { color: var(--primary); }
 .tab-ic { font-size: 20px; line-height: 1; }
+.tab-badge { position: absolute; transform: translate(14px, -6px); background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 800; min-width: 16px; height: 16px; line-height: 16px; text-align: center;
+  border-radius: 999px; padding: 0 4px; }
+.tab { position: relative; }
+.view-title { font-size: 19px; margin: 4px 0 8px; }
 
 /* Report */
 .report-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
