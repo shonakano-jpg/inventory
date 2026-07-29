@@ -145,6 +145,7 @@
     // マスタは設定内の機能なので、マスタ表示中は「設定」タブを点灯
     const tabFor = (v === "master") ? "settings" : v;
     $$(".tab").forEach((el) => el.classList.toggle("active", el.dataset.view === tabFor));
+    document.body.classList.toggle("home-active", v === "home"); // ホームではタブバーを隠す
     render();
     if (v === "report" || v === "check" || v === "home") reload(); // 最新データを取り直す
   }
@@ -921,10 +922,17 @@
   }
   // ホーム画面へ移動（＝1ページ目）
   function openPickSession() { hidePsError(); switchView("home"); }
+  // 担当者が入っていれば②以降を表示（担当者→店舗・日付/一覧 の流れ）
+  function updateHomeStep() {
+    const staff = ($("#ps-staff").value || "").trim();
+    $("#home-step2").hidden = !staff;
+    $("#ps-staff-hint").hidden = !!staff;
+  }
   // ホーム画面の描画（担当者・店舗リスト・日付・入力中一覧）
   function renderHome() {
     const staffEl = $("#ps-staff");
     if (staffEl && document.activeElement !== staffEl) staffEl.value = DB.getDeviceName() || "";
+    updateHomeStep();
     // ② 店舗は設定で登録済みの店舗のみをリスト表示
     const stores = state.stores.map((s) => s.name);
     const sel = $("#ps-store");
@@ -984,27 +992,14 @@
     await createOrJoinSession(TEST_STORE, $("#ps-date").value.trim() || todayStr());
   }
 
-  // 暗証番号でログイン → 情報入力せず、直前（最新）の棚卸し画面へ
-  function pinLogin() {
+  // 管理者ボタン → 暗証番号入力 → 設定（管理者画面）へ
+  function adminLogin() {
     const saved = (localStorage.getItem(LS_PIN) || "").trim();
-    if (!saved) {
-      toast("暗証番号が未設定です。設定→「ログイン暗証番号」で設定してください。");
-      switchView("settings"); return;
-    }
-    const entered = prompt("暗証番号を入力してください");
+    if (!saved) { switchView("settings"); return; } // 未設定なら設定画面へ（そこで暗証番号を決める）
+    const entered = prompt("管理者 暗証番号を入力してください");
     if (entered == null) return;
     if (entered.trim() !== saved) { toast("暗証番号が違います"); return; }
-    // 担当者名が入っていれば保存
-    const staff = $("#ps-staff").value.trim();
-    if (staff) { DB.setDeviceName(staff); syncStaff(staff); }
-    // 進める棚卸しを選ぶ（アクティブ→無ければ最新の未確定）
-    const openSessions = state.sessions.filter((s) => s.status !== "final" && s.status !== "closed");
-    let sess = openSessions.find((s) => s.id === state.activeSessionId)
-      || openSessions.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
-    if (!sess) { toast("進められる棚卸しがありません。店舗・日付を選んで始めてください。"); return; }
-    setActiveSession(sess.id);
-    switchView("scan");
-    toast(`棚卸しに進みました（${sess.store || "（店舗未設定）"} / ${sess.name}）`);
+    switchView("settings");
   }
 
   function renderPsList() {
@@ -1155,10 +1150,10 @@
     $("#new-session-btn").addEventListener("click", openPickSession);
 
     // 起動ホーム（棚卸しを始める）
-    $("#ps-staff").addEventListener("input", (e) => { DB.setDeviceName(e.target.value); syncStaff(e.target.value); });
+    $("#ps-staff").addEventListener("input", (e) => { DB.setDeviceName(e.target.value); syncStaff(e.target.value); updateHomeStep(); });
     $("#ps-start").addEventListener("click", startFromHome);
-    $("#ps-pin").addEventListener("click", pinLogin);
     $("#ps-test").addEventListener("click", startTestSession);
+    $("#ps-admin").addEventListener("click", adminLogin);
     $("#ps-list").addEventListener("click", (e) => {
       const li = e.target.closest("[data-sid]"); if (!li) return;
       setActiveSession(li.dataset.sid); switchView("scan");

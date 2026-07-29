@@ -296,6 +296,8 @@ select { appearance: none; }
   border-radius: 999px; padding: 0 4px; }
 .tab { position: relative; }
 .view-title { font-size: 19px; margin: 4px 0 8px; }
+body.home-active .tabbar { display: none; }
+.home-admin { width: 100%; margin-top: 28px; color: var(--muted); }
 
 /* Report */
 .report-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
