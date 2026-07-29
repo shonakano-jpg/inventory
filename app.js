@@ -47,11 +47,9 @@
     pendingSku: "",
     reportKey: null, // 選択中の店舗×日付グループ { store, date }（null=一覧）
     reportLoc: "", // 詳細でのロケーション絞り込み（""=全体）
-    lastScan: null, // 直前の読取（取消用）: { sku, location, qty }
     rackChecks: {}, // { rack: {...} } アクティブセッションのラック確認
     allRackChecks: {}, // { "session_id|rack": {...} } レポート用（全セッション）
     rackTableMissing: false,
-    rackProgOpen: false,
   };
 
   /* ---------- トースト ---------- */
@@ -185,7 +183,6 @@
   }
   function setActiveSession(id, doReload = true) {
     state.activeSessionId = id; localStorage.setItem(LS_ACTIVE, id);
-    hideUndoLast(); // セッションを切り替えたら直前取消は無効化
     if (doReload) reload();
   }
   function knownStores() {
@@ -234,8 +231,6 @@
     const show = state.location === RACK_BASE;
     row.hidden = !show;
     $("#rack-status").hidden = !show;
-    $("#rackprog-toggle").hidden = !show;
-    $("#rackprog-panel").hidden = !show || !state.rackProgOpen;
     if (!show) return;
     const input = $("#rack-input");
     if (document.activeElement !== input) input.value = state.rack;
@@ -243,7 +238,6 @@
     const racks = rackNames();
     $("#rack-datalist").innerHTML = racks.map((r) => `<option value="${esc(r)}"></option>`).join("");
     renderRackStatus();
-    if (state.rackProgOpen) renderRackProgress();
   }
 
   // このセッションで登場した店内ラック名（読取済み＋ステータス登録済み）
@@ -314,23 +308,6 @@
           <button class="btn btn-primary dc-done" data-rack="${esc(rack)}">ダブルチェック完了</button>
         </div>
       </li>`;
-    }).join("");
-  }
-
-  // ラック進捗一覧（他の人の状況が見える）
-  function renderRackProgress() {
-    const ul = $("#rackprog-list"); if (!ul) return;
-    const racks = rackNames();
-    if (!racks.length) { ul.innerHTML = `<li class="empty">まだラックがありません。店内でラック名を入れて読み取ると表示されます。</li>`; return; }
-    ul.innerHTML = racks.map((r) => {
-      const c = state.rackChecks[r];
-      const st = c ? c.status : "none";
-      const label = st === "checked" ? "✅ 完了" : st === "provisional" ? "🕒 仮登録" : "⬜ 未確認";
-      const who = st === "checked" ? `${esc(c.checked_by || "?")} ${fmtTime(c.checked_at)}` : st === "provisional" ? `${esc(c.first_by || "?")} ${fmtTime(c.first_at)}` : "";
-      return `<li class="row rackprog-item rp-${st}" data-rack-pick="${esc(r)}">
-        <div class="row-main"><div class="row-name">${esc(r)} <span class="rp-badge rp-badge-${st}">${label}</span></div>
-        <div class="row-sub">${rackQty(r)}点${who ? " ・ " + who : ""}</div></div>
-        <span class="chev">›</span></li>`;
     }).join("");
   }
 
@@ -526,29 +503,9 @@
       if (res.status === "matched") { beep("ok"); flashScan("ok", `✓ ＋${n}　${it && it.name ? it.name : "一致"}`); showFeedback("ok", (it && it.name ? it.name : "一致") + " / " + locTag + plus, sku); pulseTotal(); }
       else if (res.status === "new") { beep("ok"); flashScan("new", `✓ ＋${n}　マスタ外（新規）`); showFeedback("new", "マスタ外（新規） / " + locTag + plus, sku); pulseTotal(); }
       else { beep("dup"); flashScan("dup", `＋${n} → 合計 ×${res.qty}　${it && it.name ? it.name : ""}`); showFeedback("dup", `${locTag} ×${res.qty}` + (it && it.name ? " · " + it.name : ""), sku); pulseTotal(); }
-      state.lastScan = { sku, location: loc, qty: n };
-      showUndoLast(it && it.name ? it.name : (state.itemMap[sku] ? "" : "マスタ外"), n);
       state.scans = await DB.getScans(state.activeSessionId);
       renderScan();
     } catch (e) { beep("bad"); flashScan("bad", "✕ エラー"); showFeedback("bad", "登録エラー", sku); toast(e.message || String(e)); }
-  }
-
-  function showUndoLast(name, qty) {
-    const b = $("#undo-last"); if (!b) return;
-    b.textContent = `↩ 直前を取り消す（${name || ""}${qty > 1 ? " ×" + qty : ""}）`;
-    b.hidden = false;
-  }
-  function hideUndoLast() { const b = $("#undo-last"); if (b) b.hidden = true; state.lastScan = null; }
-
-  async function undoLastScan() {
-    const ls = state.lastScan; if (!ls) return;
-    if (!ensureEditable()) return;
-    try {
-      await DB.adjustScan(state.activeSessionId, ls.sku, ls.location, -ls.qty);
-      hideUndoLast();
-      state.scans = await DB.getScans(state.activeSessionId);
-      renderScan(); pulseTotal(); haptic("dup"); toast("直前の読取を取り消しました");
-    } catch (err) { toast("取消に失敗: " + (err.message || err)); }
   }
 
   /* ---------- 確定ワークフロー ---------- */
@@ -569,7 +526,6 @@
     if (!confirm("この棚卸しの読取をすべて消去してリセットしますか？（元に戻せません）")) return;
     try {
       await DB.clearScans(s.id);
-      hideUndoLast();
       state.scans = await DB.getScans(s.id);
       renderScan(); toast("読取をリセットしました");
     } catch (e) { toast("リセットに失敗: " + (e.message || e)); }
@@ -1181,7 +1137,6 @@
         const d = $("#device-name"); if (d) d.value = e.target.value;
       });
     }
-    $("#undo-last").addEventListener("click", undoLastScan);
     $("#session-provisional").addEventListener("click", markSessionProvisional);
     $("#recent-reset").addEventListener("click", resetRecent);
 
@@ -1221,23 +1176,9 @@
       markRackChecked(rack, inp ? inp.value : (dcDrafts[rack] || ""));
     });
 
-    // ラック進捗パネルの開閉
-    $("#rackprog-toggle").addEventListener("click", () => {
-      state.rackProgOpen = !state.rackProgOpen;
-      $("#rackprog-panel").hidden = !state.rackProgOpen;
-      $("#rackprog-toggle").classList.toggle("open", state.rackProgOpen);
-      if (state.rackProgOpen) renderRackProgress();
-    });
-    // 進捗リストのラックをタップ → そのラックを選択
-    $("#rackprog-list").addEventListener("click", (e) => {
-      const li = e.target.closest("[data-rack-pick]"); if (!li) return;
-      state.rack = li.dataset.rackPick; localStorage.setItem(LS_RACK, state.rack);
-      const ri = $("#rack-input"); if (ri) ri.value = state.rack;
-      renderRackRow();
-    });
-
     $("#cam-open").addEventListener("click", openCam);
     $("#cam-close").addEventListener("click", closeCam);
+    $("#cam-done").addEventListener("click", closeCam);
     // アプリが背面に回ったらカメラ停止（誤スキャン防止）
     document.addEventListener("visibilitychange", () => { if (document.hidden && !$("#cam-modal").hidden) closeCam(); });
     $("#zoom-range").addEventListener("input", (e) => { Scanner.setZoom(parseFloat(e.target.value)); });
@@ -1370,7 +1311,6 @@
       try {
         await DB.clearAllStocktakes();
         state.activeSessionId = ""; localStorage.removeItem(LS_ACTIVE);
-        hideUndoLast();
         await reload();
         switchView("home");
         toast("すべての棚卸しデータを消去しました");

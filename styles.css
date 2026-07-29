@@ -168,8 +168,14 @@ select { appearance: none; }
 }
 .undo-last:active { background: #3a2e12; }
 
+/* 入力の2ボタン（カメラ / 手入力。どちらも青） */
+.input-buttons { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
+.input-buttons .btn { width: 100%; }
+
 /* カメラ読取モーダル（開いている時だけスキャン） */
-.cam-open { width: 100%; }
+.cam-bottom { background: #111827; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+.cam-done { width: 100%; background: #10b981; color: #fff; font-weight: 800; font-size: 17px; padding: 15px; border: none; border-radius: 12px; }
+.cam-done:active { filter: brightness(.92); }
 .cam-modal { position: fixed; inset: 0; z-index: 60; background: #000; display: flex; flex-direction: column; }
 .cam-modal[hidden] { display: none; }
 .cam-top { display: flex; align-items: center; justify-content: space-between; gap: 10px;

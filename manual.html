@@ -108,10 +108,11 @@
   </ul>
 
   <h2 id="scan">4. バーコードを読み取る</h2>
+  <p>読み取りは <b>① 📷 カメラで読み取り</b> ボタンから。押すとカメラが<b>ポップアップ</b>で開き、開いている間だけスキャンします（閉じれば止まるので誤スキャンしません）。</p>
   <ol class="steps">
-    <li>「<span class="btn-demo demo-primary">カメラ開始</span>」を押す（初回はカメラの使用を「許可」）。</li>
-    <li>値札のバーコードを、細長い読み取り枠に入れる。</li>
-    <li>読み取れると <span class="t-ok tag">緑にピカッ</span>＋音／振動＋総点数が増えます。同じコードは自動で数量が加算されます。</li>
+    <li>「<span class="btn-demo demo-primary">① 📷 カメラで読み取り</span>」を押す（初回はカメラの使用を「許可」）。</li>
+    <li>値札のバーコードを枠に入れる。読み取れると <span class="t-ok tag">緑にピカッ</span>＋音／振動＋上部の点数が増えます。同じコードは自動で加算。</li>
+    <li>終わったら下の「<span class="btn-demo" style="background:#10b981;color:#fff">✓ 読取完了</span>」（または上の「✕ 閉じる」）でカメラを閉じます。</li>
   </ol>
   <h3>読み取りのコツ</h3>
   <ul>
@@ -124,7 +125,7 @@
 
   <h2 id="manual">5. 手入力（バーコードが無い／読めない時）</h2>
   <ol class="steps">
-    <li>「<span class="btn-demo demo-ghost">✍️ 手入力（カテゴリ・価格・着数）</span>」を押す。</li>
+    <li>「<span class="btn-demo demo-primary">② ✍️ 手入力（タグが付いていない商品）</span>」を押す。</li>
     <li>ポップアップで <b>カテゴリ</b> → <b>価格</b> → <b>着数（点数）</b> を選ぶ。</li>
     <li>「登録」を押すと、その分がまとめて計上されます。</li>
   </ol>
@@ -132,7 +133,6 @@
 
   <h2 id="fix">6. 間違えた時（取り消し・削除・リセット）</h2>
   <ul>
-    <li><b>直前の1件を取り消す</b>：読み取り直後に出る「<span class="btn-demo demo-amber">↩ 直前を取り消す</span>」。</li>
     <li><b>1点だけ減らす</b>：「最近の読み取り」一覧の各行の「<span class="btn-demo demo-amber">−1</span>」。0になると消えます。</li>
     <li><b>その行をまとめて削除</b>：各行の「<span class="btn-demo demo-red">✕</span>」（確認あり）。</li>
     <li><b>全部やり直す</b>：「最近の読み取り」の「<span class="btn-demo demo-red">リセット</span>」でこの棚卸しの読取を全消去（元に戻せません）。</li>
@@ -146,7 +146,7 @@
     <li>これでそのラックは <span class="t-final tag">✅ 完了</span> になります。</li>
   </ol>
   <div class="note">仮登録する人とダブルチェックする人は<b>別の人</b>を想定しています。数える人は仮登録したらどんどん次のラックへ、確認する人は「仮登録待ち」リストから順に消し込んでいく、という流れです。</div>
-  <p>「<b>🗂 ラックの進捗を見る</b>」で、全ラックの状態（<span class="tag" style="background:#1e2634;color:#8b96a8">⬜ 未確認</span> <span class="t-prov tag">🕒 仮登録</span> <span class="t-final tag">✅ 完了</span>）が全員の画面にリアルタイムで見えます。</p>
+  <p>下の「<b>✅ 確認待ち</b>」タブに、仮登録待ちのラックが全員の画面にリアルタイムで表示されます（タブに件数バッジも出ます）。</p>
 
   <h2 id="confirm">8. 確定する（仮確定 → 本確定＝変更不可）</h2>
   <ul>
