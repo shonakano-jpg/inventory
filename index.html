@@ -189,15 +189,27 @@
   <button class="tab" data-view="settings"><span class="tab-ic">⚙</span>設定</button>
 </nav>
 
-<!-- セッション作成モーダル -->
-<!-- 起動時: どの店舗の棚卸しか選ぶ -->
+<!-- 起動ホーム: 棚卸しを始める -->
 <div id="pick-session-modal" class="modal" hidden>
-  <div class="modal-card">
-    <h3>どの店舗の棚卸しですか？</h3>
-    <div class="muted" style="margin-bottom:8px">続ける棚卸しを選ぶか、新しく始めてください。</div>
-    <ul id="ps-list" class="ps-list"></ul>
-    <button id="ps-new" class="btn btn-primary btn-lg" style="width:100%;margin-top:10px">＋ 新しい店舗で始める</button>
+  <div class="modal-card home-card">
+    <h3>棚卸しを始める</h3>
+    <label class="home-field">① 担当者
+      <input id="ps-staff" class="search" placeholder="あなたの名前（例：田中）" autocomplete="off" />
+    </label>
+    <label class="home-field">② 店舗
+      <input id="ps-store" class="search" list="ps-store-list" placeholder="店舗を選択または入力" autocomplete="off" />
+      <datalist id="ps-store-list"></datalist>
+    </label>
+    <label class="home-field">③ 棚卸し日
+      <input id="ps-date" class="search" placeholder="例：2026-07-29" />
+    </label>
+    <div id="ps-error" class="ps-error" hidden></div>
+    <button id="ps-start" class="btn btn-primary btn-lg" style="width:100%;margin-top:4px">▶ この店舗・日付で始める</button>
     <button id="ps-test" class="btn btn-ghost btn-wide" style="width:100%;margin-top:8px">🧪 テスト店舗で始める</button>
+
+    <h4 class="home-sub">④ 入力中の棚卸し</h4>
+    <div class="muted" style="font-size:13px;margin-bottom:6px">他の人が入力中の棚卸しも出ます。タップで参加できます。</div>
+    <ul id="ps-list" class="ps-list"></ul>
   </div>
 </div>
 
