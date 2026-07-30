@@ -170,10 +170,25 @@
     });
   }
 
+  // PostgREST は既定で最大1000行しか返さないため、range で全行を分割取得する。
+  // build は毎回まっさらなクエリを返すサンク（同じクエリは再利用できないため）。
+  async function selectAll(build) {
+    const PAGE = 1000;
+    let from = 0, out = [];
+    for (;;) {
+      const { data, error } = await build().range(from, from + PAGE - 1);
+      if (error) throw error;
+      const chunk = data || [];
+      out = out.concat(chunk);
+      if (chunk.length < PAGE) break;
+      from += PAGE;
+    }
+    return out;
+  }
+
   const Cloud = {
     async getItems() {
-      const { data, error } = await sb.from("items").select("*").order("name");
-      if (error) throw error; return data || [];
+      return await selectAll(() => sb.from("items").select("*").order("name"));
     },
     async getItemMap() {
       const arr = await this.getItems(); const m = {}; arr.forEach((x) => (m[x.sku] = x)); return m;
@@ -190,8 +205,7 @@
       }
     },
     async getSessions() {
-      const { data, error } = await sb.from("sessions").select("*").order("created_at", { ascending: false });
-      if (error) throw error; return data || [];
+      return await selectAll(() => sb.from("sessions").select("*").order("created_at", { ascending: false }));
     },
     async createSession(name, store) {
       const { data, error } = await sb.from("sessions").insert({ name: name || "棚卸し " + now().slice(0, 10), store: store || "" }).select().single();
@@ -199,15 +213,13 @@
     },
     async setSessionStatus(id, status) { const { error } = await sb.from("sessions").update({ status }).eq("id", id); if (error) throw error; },
     async getScans(sessionId) {
-      const { data, error } = await sb.from("scans").select("*").eq("session_id", sessionId).order("last_at", { ascending: false });
-      if (error) throw error; return data || [];
+      return await selectAll(() => sb.from("scans").select("*").eq("session_id", sessionId).order("last_at", { ascending: false }));
     },
     async getAllScans() {
-      const { data, error } = await sb.from("scans").select("session_id, location, sku, qty");
-      if (error) throw error;
+      const data = await selectAll(() => sb.from("scans").select("session_id, location, sku, qty"));
       const storeById = {};
       (await this.getSessions()).forEach((s) => (storeById[s.id] = s.store || ""));
-      return (data || []).map((r) => ({ ...r, store: storeById[r.session_id] || "" }));
+      return data.map((r) => ({ ...r, store: storeById[r.session_id] || "" }));
     },
     async addScan(sessionId, sku, device, location, qty) {
       const loc = location || "店内在庫";
@@ -257,9 +269,8 @@
       const m = {}; (data || []).forEach((r) => (m[r.rack] = r)); return m;
     },
     async getAllRackChecks() {
-      const { data, error } = await sb.from("rack_checks").select("*");
-      if (error) throw error;
-      const m = {}; (data || []).forEach((r) => (m[r.session_id + "|" + r.rack] = r)); return m;
+      const data = await selectAll(() => sb.from("rack_checks").select("*"));
+      const m = {}; data.forEach((r) => (m[r.session_id + "|" + r.rack] = r)); return m;
     },
     async setRackCheck(sessionId, rack, patch) {
       const row = { session_id: sessionId, rack, ...patch, updated_at: now() };
