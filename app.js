@@ -182,7 +182,7 @@
   }
 
   function activeSession() { return state.sessions.find((s) => s.id === state.activeSessionId) || null; }
-  // セッション状態: open（作業中）/ provisional（仮確定）/ final（本確定=変更不可）。'closed'も変更不可扱い。
+  // セッション状態: open（作業中）/ final（本確定=変更不可）。'closed'も変更不可扱い。
   function sessionLocked(s) { const st = (s || activeSession()); const v = st && st.status; return v === "final" || v === "closed"; }
   function ensureEditable() {
     if (sessionLocked()) { toast("本確定済みのため変更できません（レポートで解除できます）"); return false; }
@@ -430,12 +430,10 @@
     const locked = st === "final" || st === "closed";
     const badge = $("#session-status");
     if (locked) { badge.hidden = false; badge.textContent = "🔒 本確定"; badge.className = "session-status st-final"; }
-    else if (st === "provisional") { badge.hidden = false; badge.textContent = "仮確定"; badge.className = "session-status st-prov"; }
     else { badge.hidden = true; }
     $("#locked-banner").hidden = !locked;
-    [["#cam-open", locked || offline], ["#manual-open", locked || offline], ["#recent-reset", locked], ["#session-provisional", locked || st === "provisional"]]
+    [["#cam-open", locked || offline], ["#manual-open", locked || offline], ["#recent-reset", locked]]
       .forEach(([sel, dis]) => { const el = $(sel); if (el) el.disabled = !!dis; });
-    $("#session-provisional").textContent = st === "provisional" ? "仮確定済み" : "仮確定";
 
     const totalQty = state.scans.reduce((a, s) => a + s.qty, 0);
     const kinds = new Set(state.scans.map((s) => s.sku)).size;
@@ -563,16 +561,6 @@
   }
 
   /* ---------- 確定ワークフロー ---------- */
-  async function markSessionProvisional() {
-    const s = activeSession(); if (!s) { toast("先にセッションを作成してください"); return; }
-    if (sessionLocked(s)) { toast("本確定済みです"); return; }
-    try {
-      await DB.setSessionStatus(s.id, "provisional");
-      state.sessions = await DB.getSessions();
-      haptic("ok"); toast("仮確定にしました"); render();
-    } catch (e) { toast("仮確定に失敗: " + (e.message || e)); }
-  }
-
   async function resetRecent() {
     const s = activeSession(); if (!s) { toast("セッションがありません"); return; }
     if (!ensureEditable()) return;
@@ -604,7 +592,7 @@
     const sess = reportGroupSessions();
     if (!confirm(`「${store} / ${date}」の本確定を解除して、編集できる状態に戻しますか？`)) return;
     try {
-      for (const s of sess) await DB.setSessionStatus(s.id, "provisional");
+      for (const s of sess) await DB.setSessionStatus(s.id, "open");
       state.sessions = await DB.getSessions();
       toast("本確定を解除しました"); renderReport();
     } catch (e) { toast("解除に失敗: " + (e.message || e)); }
@@ -1096,7 +1084,7 @@
     ul.innerHTML = list.map((s) => `
       <li class="ps-row row${s.id === state.activeSessionId ? " active" : ""}" data-sid="${esc(s.id)}">
         <div class="row-main"><div class="row-name">${esc(s.store || "（店舗未設定）")}</div>
-        <div class="row-sub">🗓 ${esc(s.name || "")} ・ ${qtyBySession[s.id] || 0}点${s.status === "provisional" ? " ・ 仮確定" : ""}</div></div>
+        <div class="row-sub">🗓 ${esc(s.name || "")} ・ ${qtyBySession[s.id] || 0}点</div></div>
         <span class="chev">›</span></li>`).join("");
   }
 
@@ -1270,7 +1258,6 @@
         const d = $("#device-name"); if (d) d.value = e.target.value;
       });
     }
-    $("#session-provisional").addEventListener("click", markSessionProvisional);
     $("#recent-reset").addEventListener("click", resetRecent);
 
     $$(".loc-btn").forEach((b) => b.addEventListener("click", () => {
