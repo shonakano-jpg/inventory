@@ -349,6 +349,8 @@
     const unit = currentUnit();
     if (inStore && !unit) { toast("ラック名を入れてください"); return; }
     const who = requireStaff(); if (!who) return;
+    const qty = unitQty(unit);
+    if (!confirm(`${unitLabel(unit)}（${qty}点）を仮登録します。よろしいですか？\n（この後は別の人がダブルチェックします）`)) return;
     try {
       await DB.setRackCheck(state.activeSessionId, unit, { status: "provisional", first_by: who, first_at: new Date().toISOString() });
       haptic("ok");
