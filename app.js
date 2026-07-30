@@ -1265,6 +1265,41 @@
     download("tanaoroshi_" + safe + ".csv", toCSV(rows));
   }
 
+  // その読取の単位の確認状態ラベル
+  function unitConfirmLabel(sc) {
+    const base = baseLocation(sc.location);
+    const unit = base === "店内在庫" ? rackOf(sc.location) : base;
+    if (base === "店内在庫" && !unit) return "未確認";
+    const c = state.allRackChecks[sc.session_id + "|" + unit];
+    if (!c) return "未確認";
+    return c.status === "checked" ? "確認済" : c.status === "provisional" ? "仮登録" : "未確認";
+  }
+  // 全明細CSV（ダブルチェック未完了も含む＝スキャン画面の総点数と一致する範囲）
+  function exportAllScansCSV() {
+    const dmap = sessionDateMap();
+    let scans = state.allScans.slice();
+    if (state.reportKey) {
+      const { store, date } = state.reportKey;
+      scans = scans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
+    } else if (state.reportStore) {
+      scans = scans.filter((sc) => storeKey(sc.store) === state.reportStore);
+    }
+    const rows = [["店舗", "棚卸日", "ロケーション", "ラック", "コード", "商品名", "カテゴリ", "単価", "数量", "確認状態", "登録者", "ダブルチェック者"]];
+    const sorted = [...scans].sort((a, b) =>
+      storeKey(a.store).localeCompare(storeKey(b.store), "ja") ||
+      scanDate(a, dmap).localeCompare(scanDate(b, dmap)) ||
+      (a.location || "").localeCompare(b.location || "") || (b.qty - a.qty));
+    sorted.forEach((sc) => {
+      const it = state.itemMap[sc.sku] || {};
+      const base = baseLocation(sc.location);
+      const unit = base === "店内在庫" ? rackOf(sc.location) : base;
+      const chk = state.allRackChecks[sc.session_id + "|" + unit] || {};
+      rows.push([storeKey(sc.store), scanDate(sc, dmap), base, rackOf(sc.location), sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty, unitConfirmLabel(sc), chk.first_by || "", chk.checked_by || ""]);
+    });
+    const safe = (state.reportKey ? state.reportKey.store + "_" + state.reportKey.date : (state.reportStore || "全体")).replace(/[^\w\-一-龠ぁ-んァ-ヶー]/g, "_");
+    download("tanaoroshi_全明細_" + safe + ".csv", toCSV(rows));
+  }
+
   /* ---------- イベント配線 ---------- */
   function wire() {
     $$(".tab").forEach((t) => t.addEventListener("click", () => {
@@ -1414,6 +1449,7 @@
     $("#csv-export-btn").addEventListener("click", exportMasterCSV);
 
     $("#report-export-btn").addEventListener("click", exportReportCSV);
+    $("#report-export-all-btn").addEventListener("click", exportAllScansCSV);
     $("#report-back").addEventListener("click", () => { state.reportKey = null; state.reportLoc = ""; renderReport(); });
     $("#report-body").addEventListener("click", (e) => {
       if (e.target.id === "finalize-btn") { finalizeStore(); return; }

@@ -7,7 +7,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<link rel="stylesheet" href="styles.css?v=51" />
+<link rel="stylesheet" href="styles.css?v=52" />
 
 <header class="topbar">
   <div class="topbar-title">古着棚卸し</div>
@@ -141,7 +141,10 @@
     <div class="report-head">
       <button id="report-back" class="btn btn-ghost" hidden>← 店舗一覧</button>
       <h2 id="report-title">店舗別レポート</h2>
-      <button id="report-export-btn" class="btn btn-primary">CSV書出</button>
+      <div class="report-export">
+        <button id="report-export-btn" class="btn btn-primary sm">確定CSV</button>
+        <button id="report-export-all-btn" class="btn btn-ghost sm">全明細CSV</button>
+      </div>
     </div>
     <div id="report-body"></div>
   </section>
@@ -334,7 +337,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="config.js?v=51"></script>
-<script src="db.js?v=51"></script>
-<script src="scanner.js?v=51"></script>
-<script src="app.js?v=51"></script>
+<script src="config.js?v=52"></script>
+<script src="db.js?v=52"></script>
+<script src="scanner.js?v=52"></script>
+<script src="app.js?v=52"></script>
