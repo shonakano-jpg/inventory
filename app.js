@@ -273,6 +273,7 @@
   }
 
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const fmtDateTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth() + 1}/${d.getDate()} ${fmtTime(iso)}`; };
 
   // 現在の単位の確認ステータス＋操作（仮登録／取消）。BY・その他は「ラック」表記なし。
   function renderRackStatus() {
@@ -457,14 +458,16 @@
     return !!(c && (c.status === "provisional" || c.status === "checked"));
   }
 
-  // 最近の読取（店内 / バックヤード / その他倉庫 に分割。仮登録するとその分は非表示）
+  // 最近の読取（店内 / バックヤード / その他倉庫 に分割）
+  //  店内ラックは仮登録すると一覧から消して次のラックへ。
+  //  バックヤード・その他倉庫は仮登録後も残し、1点ずつ修正（−1/✕）できるようにする。
   function renderRecentList(locked) {
     const list = $("#recent-list");
     const groups = { "店内在庫": [], "バックヤード在庫": [], "その他倉庫": [] };
     let shown = 0;
     state.scans.forEach((sc) => {
       const base = baseLocation(sc.location);
-      if (isUnitRegistered(sc)) return; // 仮登録済みは非表示
+      if (base === RACK_BASE && isUnitRegistered(sc)) return; // 店内ラックだけ仮登録で非表示
       if (groups[base]) { groups[base].push(sc); shown++; }
     });
     if (!state.scans.length) {
@@ -475,6 +478,16 @@
       list.innerHTML = `<li class="empty">表示する読取はありません。<br>（店内は仮登録すると最近の読取から消えます）</li>`;
       return;
     }
+    // その単位の確認状態タグ（BY/その他は仮登録後も表示されるので、状態が分かるように）
+    const regTag = (sc) => {
+      const base = baseLocation(sc.location);
+      const unit = base === RACK_BASE ? rackOf(sc.location) : base;
+      const c = unit && state.rackChecks[unit];
+      if (!c) return "";
+      return c.status === "checked"
+        ? `<span class="pill pill-done">確認済</span>`
+        : `<span class="pill pill-prov">仮登録済</span>`;
+    };
     const rowHtml = (sc) => {
       const it = state.itemMap[sc.sku];
       const name = it ? esc(it.name || "(名称なし)") : "マスタ外の商品";
@@ -483,7 +496,7 @@
         `<button class="scan-adj" data-action="minus" title="1点減らす" aria-label="1点減らす">−1</button>
         <button class="scan-del" data-action="del" title="この行を削除" aria-label="この行を削除">✕</button>`;
       return `<li class="row" data-sku="${esc(sc.sku)}" data-loc="${esc(sc.location)}">
-        <div class="row-main"><div class="row-name">${name} ${pill}</div>
+        <div class="row-main"><div class="row-name">${name} ${pill}${regTag(sc)}</div>
         <div class="row-sub"><span class="loc-tag">${esc(locLabel(sc.location))}</span> ${esc(sc.sku)}${sc.device ? " · " + esc(sc.device) : ""}</div></div>
         <span class="row-qty">×${sc.qty}</span>
         ${actions}</li>`;
@@ -589,6 +602,13 @@
       else { beep("dup"); flashScan("dup", `＋${n} → 合計 ×${res.qty}　${it && it.name ? it.name : ""}`); showFeedback("dup", `${locTag} ×${res.qty}` + (it && it.name ? " · " + it.name : ""), sku); pulseTotal(); }
       state.scans = await DB.getScans(state.activeSessionId);
       renderScan();
+      // 仮登録／確認済みの場所に追加した時は、気づけるように警告（黙って足さない）
+      const b = baseLocation(loc);
+      const unit = b === RACK_BASE ? rackOf(loc) : b;
+      const rc = unit && state.rackChecks[unit];
+      if (rc && (rc.status === "provisional" || rc.status === "checked")) {
+        toast(`⚠️ ${unitLabel(unit)}は${rc.status === "checked" ? "確認済み" : "仮登録済み"}です。追加しました（間違いなら −1／✕ で修正）`);
+      }
     } catch (e) { beep("bad"); flashScan("bad", "✕ エラー"); showFeedback("bad", "登録エラー", sku); toast(e.message || String(e)); }
   }
 
@@ -810,7 +830,14 @@
     const finalizeHtml = allFinal
       ? `<span class="fin-badge">🔒 本確定済み（変更不可）</span><button id="unfinalize-btn" class="btn btn-ghost sm">解除</button>`
       : `<button id="finalize-btn" class="btn btn-primary">本確定（変更不可にする）</button>`;
-    const subHtml = `<div class="report-sub">🏬 ${esc(store)}　🗓 ${esc(date)}</div><div class="report-finalize">${finalizeHtml}</div>`;
+    // 終了時刻＝この店舗×日付で最後にダブルチェック完了した時刻
+    const gsIds = new Set(groupSessions.map((s) => s.id));
+    let endAt = "";
+    Object.values(state.allRackChecks).forEach((c) => {
+      if (c && gsIds.has(c.session_id) && c.status === "checked" && c.checked_at && c.checked_at > endAt) endAt = c.checked_at;
+    });
+    const endHtml = endAt ? `　🕒 終了 ${fmtDateTime(endAt)}` : "";
+    const subHtml = `<div class="report-sub">🏬 ${esc(store)}　🗓 ${esc(date)}${endHtml}</div><div class="report-finalize">${finalizeHtml}</div>`;
 
     if (!scans.length) {
       body.innerHTML = subHtml +
