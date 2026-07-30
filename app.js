@@ -495,27 +495,48 @@
   }
 
   /* ---------- 手入力モーダル（カテゴリ×価格×着数） ---------- */
+  const UNKNOWN_PRICE = "__unknown__"; // 価格帯「不明」の選択肢の値
   const manualCategories = () =>
     Array.from(new Set(state.items.map((it) => it.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ja"));
   const pricesForCategory = (cat) =>
     Array.from(new Set(state.items.filter((it) => it.category === cat && it.price != null && it.price !== "").map((it) => Number(it.price)))).sort((a, b) => a - b);
+  // そのカテゴリの「価格不明」マスタ品を探す（無ければnull）
+  const unknownPriceItem = (cat) => state.items.find((x) => x.category === cat && (x.price == null || x.price === "")) || null;
   function resolveManualSku() {
     const cat = $("#mm-category").value, price = $("#mm-price").value;
+    if (price === UNKNOWN_PRICE) { const it = unknownPriceItem(cat); return it ? it.sku : null; }
     const it = state.items.find((x) => x.category === cat && String(x.price) === String(price));
     return it ? it.sku : null;
   }
   function updateManualHint() {
     const el = $("#mm-hint");
-    if (!$("#mm-category").value) { el.textContent = ""; el.className = "mm-hint"; return; }
+    const cat = $("#mm-category").value;
+    if (!cat) { el.textContent = ""; el.className = "mm-hint"; return; }
+    if ($("#mm-price").value === UNKNOWN_PRICE) {
+      el.textContent = `価格不明として登録します（カテゴリ: ${cat}）`;
+      el.className = "mm-hint ok";
+      return;
+    }
     const sku = resolveManualSku();
     el.textContent = sku ? `コード: ${sku}` : "⚠️ この組み合わせの商品がマスタにありません";
     el.className = "mm-hint" + (sku ? " ok" : " warn");
   }
   function fillManualPrices() {
     const prices = pricesForCategory($("#mm-category").value);
-    $("#mm-price").innerHTML = prices.map((p) => `<option value="${p}">¥${p.toLocaleString("ja-JP")}</option>`).join("")
-      || `<option value="">（価格なし）</option>`;
+    const opts = prices.map((p) => `<option value="${p}">¥${p.toLocaleString("ja-JP")}</option>`);
+    opts.push(`<option value="${UNKNOWN_PRICE}">不明（価格が分からない）</option>`);
+    $("#mm-price").innerHTML = opts.join("");
     updateManualHint();
+  }
+  // カテゴリの「価格不明」コードを用意（無ければマスタに作成）してskuを返す
+  async function ensureUnknownPriceSku(cat) {
+    const existing = unknownPriceItem(cat);
+    if (existing) return existing.sku;
+    const sku = "UNK-" + cat; // 手入力専用のテキストコード（バーコードとは衝突しない）
+    await DB.upsertItem({ sku, name: cat + " ¥不明", category: cat, price: "", expected: "" });
+    state.itemMap = await DB.getItemMap();
+    state.items = Object.values(state.itemMap).sort((a, b) => (a.name || "").localeCompare(b.name || "", "ja"));
+    return sku;
   }
   function openManualModal() {
     if (!activeSession()) { openPickSession(); return; }
@@ -531,9 +552,18 @@
   }
   function closeManualModal() { $("#manual-modal").hidden = true; }
   async function addManual() {
-    const sku = resolveManualSku();
-    if (!sku) { toast("該当する商品がマスタにありません"); return; }
+    const cat = $("#mm-category").value;
+    const priceVal = $("#mm-price").value;
     const qty = Math.max(1, parseInt($("#mm-qty").value, 10) || 1);
+    let sku;
+    if (priceVal === UNKNOWN_PRICE) {
+      if (!cat) { toast("カテゴリを選んでください"); return; }
+      try { sku = await ensureUnknownPriceSku(cat); }
+      catch (e) { toast("登録準備に失敗: " + (e.message || e)); return; }
+    } else {
+      sku = resolveManualSku();
+      if (!sku) { toast("該当する商品がマスタにありません"); return; }
+    }
     closeManualModal();
     await handleScan(sku, qty);
   }
