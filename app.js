@@ -364,7 +364,8 @@
     ul.innerHTML = rows.map((m) => {
       if (m.orphan) {
         return `<li class="dc-row"><div class="dc-head"><div class="dc-name"><b>⚠️ ${esc(m.label)}</b></div><div class="dc-qty"><b>${m.qty}点</b></div></div>
-          <div class="dc-sub">ラックが無いため仮登録できません。スキャン画面でラック名を付けて読み直してください。</div></li>`;
+          <div class="dc-sub">ラックが無いため確定（ダブルチェック）できません。ラックを付けると、仮登録→ダブルチェックできるようになります。</div>
+          <button class="btn btn-primary uc-assign">ラックを付ける</button></li>`;
       }
       return `<li class="dc-row"><div class="dc-head"><div class="dc-name"><b>${esc(m.label)}</b></div><div class="dc-qty">読取 <b>${m.qty}点</b></div></div>
         <div class="dc-sub">まだ仮登録していません。数え終わっていれば仮登録してください。</div>
@@ -385,6 +386,28 @@
       renderCheckView(); renderCheckBadge();
       if (state.view === "scan") renderScan();
     } catch (e) { toast("仮登録に失敗: " + (e.message || e)); }
+  }
+
+  // 店内でラック名なしの読取に、後からラック名を付ける（確定できるようにする）
+  async function assignRackToOrphans() {
+    if (!ensureEditable()) return;
+    const orphans = state.scans.filter((sc) => baseLocation(sc.location) === RACK_BASE && !rackOf(sc.location));
+    if (!orphans.length) { toast("対象の読取がありません"); return; }
+    const qty = orphans.reduce((a, s) => a + s.qty, 0);
+    const rack = (prompt(`店内でラック名なしの読取（${qty}点）にラック名を付けます。\nラック名を入力してください（例：店内その他）`, "店内その他") || "").trim();
+    if (!rack) return;
+    const newLoc = RACK_BASE + RACK_SEP + rack;
+    try {
+      for (const sc of orphans) {
+        // 先に付け替え先へ加算 → 元を削除（途中で失敗してもデータは消えない）
+        await DB.addScan(state.activeSessionId, sc.sku, sc.device || DB.getDeviceName(), newLoc, sc.qty);
+        await DB.removeScan(state.activeSessionId, sc.sku, sc.location);
+      }
+      state.scans = await DB.getScans(state.activeSessionId);
+      toast(`ラック「${rack}」に付け替えました。確認待ちで仮登録→ダブルチェックしてください`);
+      renderCheckView(); renderCheckBadge();
+      if (state.view === "scan") renderScan();
+    } catch (e) { toast("付け替えに失敗: " + (e.message || e)); }
   }
 
   function requireStaff() {
@@ -1498,6 +1521,7 @@
       markRackChecked(rack, inp ? inp.value : (dcDrafts[rack] || ""));
     });
     $("#unconfirmed-list").addEventListener("click", (e) => {
+      if (e.target.closest(".uc-assign")) { assignRackToOrphans(); return; }
       const prov = e.target.closest(".uc-prov");
       if (prov) markUnitProvisional(prov.dataset.unit, prov.dataset.label);
     });
