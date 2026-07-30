@@ -7,7 +7,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<link rel="stylesheet" href="styles.css?v=54" />
+<link rel="stylesheet" href="styles.css?v=55" />
 
 <header class="topbar">
   <div class="topbar-title">古着棚卸し</div>
@@ -116,8 +116,11 @@
 
   <!-- ===== 確認待ち（ダブルチェック） ===== -->
   <section id="view-check" class="view">
-    <h2 class="view-title">確認待ち（ダブルチェック）</h2>
+    <h2 class="view-title">確認待ち</h2>
     <div id="check-sub" class="muted" style="margin-bottom:8px"></div>
+    <h3 class="dc-h">① まだ仮登録していない場所（未確認）</h3>
+    <ul id="unconfirmed-list" class="dc-list"></ul>
+    <h3 class="dc-h">② 仮登録待ち（別の人がダブルチェック）</h3>
     <ul id="dc-list" class="dc-list"></ul>
   </section>
 
@@ -337,7 +340,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="config.js?v=54"></script>
-<script src="db.js?v=54"></script>
-<script src="scanner.js?v=54"></script>
-<script src="app.js?v=54"></script>
+<script src="config.js?v=55"></script>
+<script src="db.js?v=55"></script>
+<script src="scanner.js?v=55"></script>
+<script src="app.js?v=55"></script>
