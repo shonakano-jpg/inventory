@@ -30,6 +30,7 @@
   const LS_ACTIVE = "fi_active_session";
   const LS_LOC = "fi_location";
   const LS_RACK = "fi_rack";
+  const LS_RECV_RACK = "fi_recv_rack";
   const LS_PIN = "fi_login_pin";
 
   const state = {
@@ -44,6 +45,7 @@
     allScans: [],
     location: localStorage.getItem(LS_LOC) || "店内在庫",
     rack: localStorage.getItem(LS_RACK) || "",
+    recvRack: localStorage.getItem(LS_RECV_RACK) || "入荷",
     pickOpen: false,
     pendingSku: "",
     reportKey: null, // 選択中の店舗×日付グループ { store, date }（null=一覧）
@@ -154,7 +156,7 @@
       state.reportStore = (s && s.store) ? storeKey(s.store) : "";
     }
     render();
-    if (v === "report" || v === "check" || v === "home") reload(); // 最新データを取り直す
+    if (v === "report" || v === "check" || v === "home" || v === "receiving") reload(); // 最新データを取り直す
   }
 
   /* ---------- データ再取得 ---------- */
@@ -212,6 +214,7 @@
     if (state.view === "home") renderHome();
     else if (state.view === "scan") renderScan();
     else if (state.view === "check") renderCheckView();
+    else if (state.view === "receiving") renderReceiving();
     else if (state.view === "master") renderMaster();
     else if (state.view === "report") renderReport();
     else if (state.view === "settings") renderSettings();
@@ -692,6 +695,66 @@
     } catch (e) { beep("bad"); flashScan("bad", "✕ エラー"); showFeedback("bad", "登録エラー", sku); toast(e.message || String(e)); }
   }
 
+  /* ---------- 入荷（店内在庫に追加。即カウント＝ダブルチェック不要） ---------- */
+  const recvRackName = () => (state.recvRack || "入荷").trim() || "入荷";
+  async function handleReceivingScan(rawText, qty) {
+    const sku = (rawText || "").trim(); if (!sku) return;
+    const n = Math.max(1, parseInt(qty, 10) || 1);
+    const s = activeSession();
+    if (!s) { toast("先に店舗（棚卸し）を選んでください"); showFeedback("bad", "店舗未選択", ""); return; }
+    if (!ensureOnline()) { showFeedback("bad", "クラウド未接続", ""); return; }
+    const rack = recvRackName();
+    const loc = RACK_BASE + RACK_SEP + rack;
+    try {
+      const res = await DB.addScan(state.activeSessionId, sku, DB.getDeviceName(), loc, n);
+      // 入荷ラックは自動でダブルチェック完了扱い（すぐ比率に反映）
+      const c = state.rackChecks[rack];
+      if (!c || c.status !== "checked") {
+        const nowIso = new Date().toISOString();
+        await DB.setRackCheck(state.activeSessionId, rack, { status: "checked", first_by: "入荷", first_at: nowIso, checked_by: "入荷", checked_at: nowIso });
+      }
+      const it = res.item;
+      beep("ok"); flashScan("ok", `✓ 入荷 ＋${n}　${it && it.name ? it.name : "マスタ外"}`);
+      showFeedback("ok", `入荷「${rack}」に追加${it && it.name ? " ・ " + it.name : ""}`, sku);
+      state.scans = await DB.getScans(state.activeSessionId);
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId);
+      _confirmCtx = null;
+      renderReceiving();
+    } catch (e) { beep("bad"); flashScan("bad", "✕ エラー"); showFeedback("bad", "入荷の登録エラー", sku); toast(e.message || String(e)); }
+  }
+  // アクティブセッションの「店内・確定済み」読取
+  function inStoreConfirmedScans() {
+    return state.scans.filter((sc) => {
+      if (baseLocation(sc.location) !== RACK_BASE) return false;
+      const r = rackOf(sc.location); if (!r) return false;
+      const c = state.rackChecks[r];
+      return !!(c && c.status === "checked");
+    });
+  }
+  function renderReceiving() {
+    const s = activeSession();
+    const sub = $("#recv-store");
+    if (sub) sub.textContent = s ? `${s.store || "（店舗未設定）"} / ${s.name}` : "先に店舗（棚卸し）を選んでください。";
+    const ob = $("#recv-offline"); if (ob) ob.hidden = (DB.mode === "cloud");
+    const ri = $("#recv-rack");
+    if (ri && document.activeElement !== ri) ri.value = state.recvRack || "";
+    const dl = $("#recv-rack-list"); if (dl) dl.innerHTML = rackNames().map((r) => `<option value="${esc(r)}"></option>`).join("");
+    const cam = $("#recv-cam"); if (cam) cam.disabled = (DB.mode !== "cloud" || !s);
+    const rack = recvRackName();
+    const recvQty = state.scans.filter((sc) => baseLocation(sc.location) === RACK_BASE && rackOf(sc.location) === rack).reduce((a, x) => a + x.qty, 0);
+    $("#recv-total").textContent = recvQty;
+    // 店内比率（確定済み・小物除く。入荷分を含む）
+    const conf = inStoreConfirmedScans();
+    const g = conf.filter((sc) => !isKomono(sc));
+    const gt = sumQty(g);
+    $("#recv-instore").textContent = gt;
+    const box = $("#recv-ratio");
+    if (box) box.innerHTML = gt
+      ? `<h3 class="chart-title">店内のカテゴリ比率（入荷を含む）</h3>${barChart(catSumOf(g), gt, "cat")}
+         <h3 class="chart-title">店内の価格帯比率</h3>${barChart(priceSumOf(g), gt, "price")}`
+      : `<div class="empty">まだ確定済みの店内在庫がありません。入荷を読み取ると比率が出ます。</div>`;
+  }
+
   /* ---------- 確定ワークフロー ---------- */
   async function finalizeStore() {
     if (!state.reportKey) return;
@@ -738,7 +801,8 @@
 
   let fbT;
   function showFeedback(kind, msg, sku) {
-    const el = $("#scan-feedback");
+    const el = state.view === "receiving" ? $("#scan-feedback-recv") : $("#scan-feedback");
+    if (!el) return;
     el.className = "scan-feedback " + kind;
     el.innerHTML = `<span>${esc(msg)}</span>` + (sku ? ` <span class="fb-sku">${esc(sku)}</span>` : "");
     void el.offsetWidth; // ポップアニメを毎回再生
@@ -747,11 +811,12 @@
   }
 
   // カメラ読取モーダルを開いてスキャン開始（開いている時だけ動作＝誤スキャン防止）
-  async function openCam() {
+  async function openCam(handler) {
+    const recv = handler === handleReceivingScan;
     if (!activeSession()) { openPickSession(); return; }
     if (!ensureOnline()) return;
-    if (!ensureEditable()) return;
-    if (state.location === RACK_BASE && !state.rack.trim()) { toast("店内は先にラック名を入れてください"); const ri = $("#rack-input"); if (ri) ri.focus(); return; }
+    if (!recv && !ensureEditable()) return; // 入荷は本確定済みでも可
+    if (!recv && state.location === RACK_BASE && !state.rack.trim()) { toast("店内は先にラック名を入れてください"); const ri = $("#rack-input"); if (ri) ri.focus(); return; }
     if (Scanner.isScanning()) return;
     unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
     const modal = $("#cam-modal"), wrap = $("#cam-modal .cam-stage"), torchBtn = $("#torch-toggle"), zoomRow = $("#zoom-row");
@@ -759,7 +824,7 @@
     modal.classList.add("scanning"); // カメラ表示ON
     updateCamCount();
     try {
-      await Scanner.start("reader", handleScan);
+      await Scanner.start("reader", handler || handleScan);
       setTimeout(() => {
         if (Scanner.torchSupported()) torchBtn.hidden = false; else torchBtn.hidden = true;
         const zc = Scanner.zoomCap();
@@ -1547,7 +1612,13 @@
       if (prov) markUnitProvisional(prov.dataset.unit, prov.dataset.label);
     });
 
-    $("#cam-open").addEventListener("click", openCam);
+    $("#cam-open").addEventListener("click", () => openCam(handleScan));
+    $("#recv-cam").addEventListener("click", () => openCam(handleReceivingScan));
+    $("#recv-rack").addEventListener("input", (e) => {
+      state.recvRack = e.target.value;
+      localStorage.setItem(LS_RECV_RACK, e.target.value);
+      renderReceiving();
+    });
     $("#cam-close").addEventListener("click", closeCam);
     $("#cam-done").addEventListener("click", closeCam);
     // アプリが背面に回ったらカメラ停止（誤スキャン防止）

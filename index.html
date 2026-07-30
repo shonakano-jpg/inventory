@@ -7,7 +7,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<link rel="stylesheet" href="styles.css?v=58" />
+<link rel="stylesheet" href="styles.css?v=59" />
 
 <header class="topbar">
   <div class="topbar-title">古着棚卸し</div>
@@ -122,6 +122,28 @@
     <ul id="unconfirmed-list" class="dc-list"></ul>
     <h3 class="dc-h">② 仮登録待ち（別の人がダブルチェック）</h3>
     <ul id="dc-list" class="dc-list"></ul>
+  </section>
+
+  <!-- ===== 入荷（店頭に出す商品を店内在庫に追加） ===== -->
+  <section id="view-receiving" class="view">
+    <h2 class="view-title">入荷（店内在庫に追加）</h2>
+    <div id="recv-store" class="muted" style="margin-bottom:8px"></div>
+    <div id="recv-offline" class="offline-banner" hidden>⚠️ クラウド未接続のため入荷できません。通信を確認して再読み込みしてください。</div>
+    <div class="rack-row">
+      <label class="rack-label" for="recv-rack">入荷ラック</label>
+      <input id="recv-rack" class="rack-input" list="recv-rack-list" placeholder="入荷" autocomplete="off" />
+      <datalist id="recv-rack-list"></datalist>
+    </div>
+    <div class="report-note">読み取ると、この店舗の<b>店内在庫</b>（上のラック）に <b>+1</b> され、<b>すぐに下の比率へ反映</b>されます（ダブルチェック不要）。</div>
+    <div class="input-buttons">
+      <button id="recv-cam" class="btn btn-primary btn-lg btn-wide">📷 入荷を読み取る</button>
+    </div>
+    <div id="scan-feedback-recv" class="scan-feedback"></div>
+    <div class="progress-row">
+      <div class="stat"><div class="stat-num" id="recv-total">0</div><div class="stat-lbl">このラックの入荷</div></div>
+      <div class="stat"><div class="stat-num" id="recv-instore">0</div><div class="stat-lbl">店内 合計(確定)</div></div>
+    </div>
+    <div id="recv-ratio"></div>
   </section>
 
   <!-- ===== マスタ（設定内の機能） ===== -->
@@ -245,6 +267,7 @@
 <nav class="tabbar">
   <button class="tab active" data-view="scan"><span class="tab-ic">▣</span>スキャン</button>
   <button class="tab" data-view="check"><span class="tab-ic">✅</span>確認待ち<span id="check-badge" class="tab-badge" hidden></span></button>
+  <button class="tab" data-view="receiving"><span class="tab-ic">📥</span>入荷</button>
   <button class="tab" data-view="report"><span class="tab-ic">◪</span>レポート</button>
   <button class="tab" data-view="settings"><span class="tab-ic">⚙</span>設定</button>
 </nav>
@@ -340,7 +363,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="config.js?v=58"></script>
-<script src="db.js?v=58"></script>
-<script src="scanner.js?v=58"></script>
-<script src="app.js?v=58"></script>
+<script src="config.js?v=59"></script>
+<script src="db.js?v=59"></script>
+<script src="scanner.js?v=59"></script>
+<script src="app.js?v=59"></script>
