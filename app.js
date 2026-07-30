@@ -913,6 +913,16 @@
          ${locRow("その他倉庫", "その他倉庫")}
        </ul>`;
 
+    // ④ マスタ外の商品（マスタに無いコード＝要登録）。未確認も含めた全読取から抽出。
+    const extMap = {}; // sku -> qty
+    groupAll.forEach((sc) => { if (!state.itemMap[sc.sku]) extMap[sc.sku] = (extMap[sc.sku] || 0) + sc.qty; });
+    const extRows = Object.entries(extMap).sort((a, b) => b[1] - a[1]);
+    const extHtml = extRows.length
+      ? `<ul class="unit-list">` + extRows.map(([sku, q]) =>
+          `<li class="unit-item ext-row" data-ext-sku="${esc(sku)}"><div class="unit-top"><span class="unit-name">🏷 ${esc(sku)}</span><span class="unit-qty">${jnum(q)}点 ›</span></div><div class="unit-who">タップして商品マスタに登録</div></li>`).join("") + `</ul>`
+      : `<div class="empty">マスタ外の商品はありません（すべてマスタに登録済み）。</div>`;
+    const unknownPriceTotal = sumQty(scans.filter((sc) => { const it = state.itemMap[sc.sku]; return it && (it.price == null || it.price === ""); }));
+
     body.innerHTML = subHtml +
       `<div class="report-note">※ ダブルチェック完了分のみ集計（店内はラックのダブルチェック完了が対象。BY/その他は全数）。</div>
        <h3 class="chart-title">① サマリー</h3>
@@ -929,7 +939,10 @@
        ${perCatHtml}
        <h3 class="chart-title">③ 確認済みの一覧（抜け漏れチェック）</h3>
        <div class="report-note">ダブルチェック完了した場所だけが出ます。⚠️や、あるはずのラックが出ていない場合は未確認です。抜けがないか確認してください。</div>
-       ${unitsHtml}`;
+       ${unitsHtml}
+       <h3 class="chart-title">④ マスタ外の商品（要登録）</h3>
+       <div class="report-note">商品マスタに<b>無いコード</b>です（未確認分も含む）。カテゴリ・価格が分からないため、レポートでは「マスタ外／不明」に集計されます。<b>各行をタップすると商品マスタに登録</b>でき、登録するとカテゴリ・価格が正しく集計されます。${unknownPriceTotal ? `<br>※ このほか、マスタにあるが価格が空の「価格不明」が ${jnum(unknownPriceTotal)}点 あります（カテゴリは集計されます）。` : ""}</div>
+       ${extHtml}`;
   }
 
   // 横棒＋割合の簡易チャート
@@ -1454,6 +1467,8 @@
     $("#report-body").addEventListener("click", (e) => {
       if (e.target.id === "finalize-btn") { finalizeStore(); return; }
       if (e.target.id === "unfinalize-btn") { unfinalizeStore(); return; }
+      const ext = e.target.closest("[data-ext-sku]");
+      if (ext) { openItemModal(ext.dataset.extSku); return; } // マスタ外→登録
       const locEl = e.target.closest("[data-rloc]");
       if (locEl) { const l = locEl.dataset.rloc; state.reportLoc = (state.reportLoc === l) ? "" : l; renderReport(); return; }
       const li = e.target.closest("[data-store]"); if (!li) return;

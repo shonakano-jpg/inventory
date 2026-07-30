@@ -459,6 +459,9 @@ textarea.search { resize: vertical; font-family: inherit; line-height: 1.6; }
 .unit-item .unit-who { font-size: 12px; color: var(--muted); }
 .unit-item .unit-who b { color: var(--text); font-weight: 700; }
 .unit-item.unit-missing { background: #241014; border-color: #5a2626; }
+.unit-item.ext-row { cursor: pointer; border-color: #4a3d1c; background: #201a0e; }
+.unit-item.ext-row:active { background: #2a2410; }
+.unit-item.ext-row .unit-who { color: #f4c66a; }
 .unit-item.unit-missing .unit-name { color: #f39a9a; }
 .unit-item.unit-missing .unit-qty { color: #f39a9a; }
 .cat-title { font-size: 14px; font-weight: 700; margin: 14px 0 4px; }
