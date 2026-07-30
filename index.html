@@ -7,7 +7,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<link rel="stylesheet" href="styles.css?v=47" />
+<link rel="stylesheet" href="styles.css?v=48" />
 
 <header class="topbar">
   <div class="topbar-title">古着棚卸し</div>
@@ -206,9 +206,8 @@
 
     <div class="setting-group">
       <h3>データ</h3>
-      <p class="muted">「全ての棚卸しデータを消去」は、全店舗・全端末の棚卸し（セッション・読取・ラック確認）を消します。商品マスタと店舗マスタは残ります。元に戻せません。</p>
-      <div class="btn-row"><button id="wipe-all-btn" class="btn btn-danger btn-wide">🗑 全ての棚卸しデータを消去</button></div>
-      <div class="btn-row" style="margin-top:8px"><button id="wipe-btn" class="btn btn-ghost">この端末のローカルデータを消去</button></div>
+      <p class="muted">この端末のローカルデータ（キャッシュ）だけを消します。クラウド共有中の棚卸しデータには影響しません。<br>※全店舗の棚卸しデータを一括で消す機能は、誤操作事故を防ぐため廃止しました。必要な場合は管理者がSupabase側で対応します。</p>
+      <div class="btn-row"><button id="wipe-btn" class="btn btn-ghost">この端末のローカルデータを消去</button></div>
     </div>
     <p class="muted center">古着棚卸し PWA</p>
   </section>
@@ -335,7 +334,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="config.js?v=47"></script>
-<script src="db.js?v=47"></script>
-<script src="scanner.js?v=47"></script>
-<script src="app.js?v=47"></script>
+<script src="config.js?v=48"></script>
+<script src="db.js?v=48"></script>
+<script src="scanner.js?v=48"></script>
+<script src="app.js?v=48"></script>

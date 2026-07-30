@@ -1417,17 +1417,6 @@
       finally { btn.disabled = false; btn.textContent = "接続して保存"; renderSettings(); }
     });
     $("#sb-clear-btn").addEventListener("click", async () => { DB.disconnectCloud(); toast("接続を解除しました"); await reload(); });
-    $("#wipe-all-btn").addEventListener("click", async () => {
-      if (!confirm("全ての棚卸しデータ（全店舗のセッション・読取・ラック確認）を消去します。\n商品マスタと店舗は残ります。元に戻せません。実行しますか？")) return;
-      if (!confirm("本当によろしいですか？（全端末に反映されます）")) return;
-      try {
-        await DB.clearAllStocktakes();
-        state.activeSessionId = ""; localStorage.removeItem(LS_ACTIVE);
-        await reload();
-        switchView("home");
-        toast("すべての棚卸しデータを消去しました");
-      } catch (e) { toast("消去に失敗: " + (e.message || e)); }
-    });
     $("#wipe-btn").addEventListener("click", () => {
       if (confirm("この端末のローカルデータ（マスタ・セッション・読取）を消去しますか？\nクラウド共有中のデータは消えません。")) {
         DB.wipeLocal(); state.activeSessionId = ""; localStorage.removeItem(LS_ACTIVE); reload();
