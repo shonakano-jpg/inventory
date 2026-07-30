@@ -304,6 +304,8 @@ select { appearance: none; }
 .pill-ok { background: #10331f; color: var(--green); }
 .pill-new { background: #10283f; color: #7cc0ff; }
 .pill-miss { background: #3a2e12; color: var(--amber); }
+.pill-prov { background: #2a2410; color: #f4c66a; }
+.pill-done { background: #10331f; color: var(--green); }
 
 /* Toolbar */
 .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
