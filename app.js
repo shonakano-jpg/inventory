@@ -557,6 +557,7 @@
     if (!activeSession()) { openPickSession(); return; }
     if (!ensureOnline()) return;
     if (!ensureEditable()) return;
+    if (state.location === RACK_BASE && !state.rack.trim()) { toast("店内は先にラック名を入れてください"); const ri = $("#rack-input"); if (ri) ri.focus(); return; }
     const cats = manualCategories();
     if (!cats.length) { toast("先にマスタ（商品）を取り込んでください"); return; }
     $("#mm-category").innerHTML = cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
@@ -591,6 +592,13 @@
     if (!s) { toast("先に棚卸しセッションを作成してください"); showFeedback("bad", "セッション未選択", ""); return; }
     if (!ensureOnline()) { showFeedback("bad", "クラウド未接続（共有されません）", ""); return; }
     if (!ensureEditable()) { showFeedback("bad", "本確定済み（変更不可）", ""); return; }
+    // 店内はラック名が無いと確定（ダブルチェック）できないため、読み取り自体を止める
+    if (state.location === RACK_BASE && !state.rack.trim()) {
+      beep("bad"); flashScan("bad", "✕ ラック名を入れてください");
+      showFeedback("bad", "店内は先にラック名を入力してください", "");
+      const ri = $("#rack-input"); if (ri) ri.focus();
+      return;
+    }
     try {
       const loc = effectiveLocation();
       const res = await DB.addScan(state.activeSessionId, sku, DB.getDeviceName(), loc, n);
@@ -671,6 +679,7 @@
     if (!activeSession()) { openPickSession(); return; }
     if (!ensureOnline()) return;
     if (!ensureEditable()) return;
+    if (state.location === RACK_BASE && !state.rack.trim()) { toast("店内は先にラック名を入れてください"); const ri = $("#rack-input"); if (ri) ri.focus(); return; }
     if (Scanner.isScanning()) return;
     unlockAudio(); // iOSの音を解錠（ユーザー操作中に実行）
     const modal = $("#cam-modal"), wrap = $("#cam-modal .cam-stage"), torchBtn = $("#torch-toggle"), zoomRow = $("#zoom-row");
@@ -923,6 +932,36 @@
       : `<div class="empty">マスタ外の商品はありません（すべてマスタに登録済み）。</div>`;
     const unknownPriceTotal = sumQty(scans.filter((sc) => { const it = state.itemMap[sc.sku]; return it && (it.price == null || it.price === ""); }));
 
+    // ⑤ 未反映（レポート外）の内訳＝全読取 − 確定。差がある理由を見える化。
+    const allTotal = sumQty(groupAll);
+    const gap = allTotal - total;
+    let orphanQty = 0;           // 店内でラック名なし（確定不可）
+    const pendMap = {};          // 未確認/仮登録の場所ごと
+    groupAll.forEach((sc) => {
+      if (scanConfirmed(sc)) return;
+      const base = baseLocation(sc.location);
+      const unit = base === "店内在庫" ? rackOf(sc.location) : base;
+      if (base === "店内在庫" && !unit) { orphanQty += sc.qty; return; }
+      const c = state.allRackChecks[sc.session_id + "|" + unit];
+      const status = c && c.status === "provisional" ? "仮登録" : "未確認";
+      const label = base === "店内在庫" ? "ラック " + unit : unitLabel(unit);
+      const m = pendMap[base + "|" + unit] || (pendMap[base + "|" + unit] = { label, qty: 0, status });
+      m.qty += sc.qty;
+    });
+    const pendRows = Object.values(pendMap).sort((a, b) => b.qty - a.qty);
+    let gapHtml = "";
+    if (gap > 0) {
+      gapHtml = `<h3 class="chart-title">⑤ 未反映（レポートに出ていない ${jnum(gap)}点）</h3>
+        <div class="report-note">全読取 ${jnum(allTotal)} − 確定 ${jnum(total)} = <b>${jnum(gap)}点</b>。下記を解消すると確定に反映されます。</div>
+        <ul class="unit-list">` +
+        (orphanQty > 0
+          ? `<li class="unit-item unit-missing"><div class="unit-top"><span class="unit-name">⚠️ 店内でラック名なし</span><span class="unit-qty">${jnum(orphanQty)}点</span></div><div class="unit-who">ラックが無いと確定できません。「全明細CSV」で<b>場所=店内在庫・ラック空</b>の行を確認し、正しいラックで読み直してください。</div></li>`
+          : "") +
+        pendRows.map((m) =>
+          `<li class="unit-item"><div class="unit-top"><span class="unit-name">${m.status === "仮登録" ? "🕒" : "◻️"} ${esc(m.label)}</span><span class="unit-qty">${jnum(m.qty)}点</span></div><div class="unit-who">${m.status}：ダブルチェック完了で反映されます</div></li>`).join("") +
+        `</ul>`;
+    }
+
     body.innerHTML = subHtml +
       `<div class="report-note">※ ダブルチェック完了分のみ集計（店内はラックのダブルチェック完了が対象。BY/その他は全数）。</div>
        <h3 class="chart-title">① サマリー</h3>
@@ -942,7 +981,8 @@
        ${unitsHtml}
        <h3 class="chart-title">④ マスタ外の商品（要登録）</h3>
        <div class="report-note">商品マスタに<b>無いコード</b>です（未確認分も含む）。カテゴリ・価格が分からないため、レポートでは「マスタ外／不明」に集計されます。<b>各行をタップすると商品マスタに登録</b>でき、登録するとカテゴリ・価格が正しく集計されます。${unknownPriceTotal ? `<br>※ このほか、マスタにあるが価格が空の「価格不明」が ${jnum(unknownPriceTotal)}点 あります（カテゴリは集計されます）。` : ""}</div>
-       ${extHtml}`;
+       ${extHtml}
+       ${gapHtml}`;
   }
 
   // 横棒＋割合の簡易チャート
