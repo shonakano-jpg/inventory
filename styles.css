@@ -145,7 +145,8 @@ select { appearance: none; }
 
 /* 仮登録待ち（ダブルチェック）ボタン＆一覧 */
 .dc-open { width: 100%; margin: 0 0 8px; }
-.dc-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+.dc-h { font-size: 14px; font-weight: 800; color: var(--text); margin: 18px 0 4px; }
+.dc-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .dc-row { background: var(--surface); border: 1px solid #5a4a20; border-radius: 12px; padding: 12px; }
 .dc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .dc-name { font-size: 16px; }

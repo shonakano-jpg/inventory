@@ -177,6 +177,7 @@
       try { state.allRackChecks = await DB.getAllRackChecks(); } catch { state.allRackChecks = {}; }
     } catch (e) { console.error(e); toast("読込エラー: " + (e.message || e)); }
     finally { loading = false; }
+    _confirmCtx = null; // 確認状態キャッシュを作り直す
     render();
     if (state.view === "home") renderPsList(); // ホーム表示中は入力中一覧も更新
   }
@@ -229,8 +230,9 @@
     if (sub) {
       const s = activeSession();
       if (state.rackTableMissing) sub.textContent = "クラウド側の準備が必要です（設定→SQLを1回実行）。";
-      else sub.textContent = s ? `${s.store || "（店舗未設定）"} / ${s.name} の仮登録待ち` : "棚卸しを選んでください。";
+      else sub.textContent = s ? `${s.store || "（店舗未設定）"} / ${s.name}` : "棚卸しを選んでください。";
     }
+    renderUnconfirmedList();
     renderDcList();
   }
 
@@ -338,6 +340,53 @@
     }).join("");
   }
 
+  // まだ仮登録していない場所（読取はあるが確認ステータスが無い＝未確認）
+  function unconfirmedUnits() {
+    const map = {}; // key -> { label, qty, unit, orphan }
+    state.scans.forEach((sc) => {
+      const base = baseLocation(sc.location);
+      const unit = base === RACK_BASE ? rackOf(sc.location) : base;
+      if (base === RACK_BASE && !unit) {
+        const m = map["__orphan__"] || (map["__orphan__"] = { label: "店内（ラック未設定）", qty: 0, orphan: true });
+        m.qty += sc.qty; return;
+      }
+      const c = state.rackChecks[unit];
+      if (c && (c.status === "provisional" || c.status === "checked")) return; // 既に仮登録/確認済み
+      const m = map[unit] || (map[unit] = { label: base === RACK_BASE ? "ラック " + unit : unitLabel(unit), qty: 0, unit });
+      m.qty += sc.qty;
+    });
+    return Object.values(map).sort((a, b) => b.qty - a.qty);
+  }
+  function renderUnconfirmedList() {
+    const ul = $("#unconfirmed-list"); if (!ul) return;
+    const rows = unconfirmedUnits();
+    if (!rows.length) { ul.innerHTML = `<li class="empty">未確認の場所はありません。</li>`; return; }
+    ul.innerHTML = rows.map((m) => {
+      if (m.orphan) {
+        return `<li class="dc-row"><div class="dc-head"><div class="dc-name"><b>⚠️ ${esc(m.label)}</b></div><div class="dc-qty"><b>${m.qty}点</b></div></div>
+          <div class="dc-sub">ラックが無いため仮登録できません。スキャン画面でラック名を付けて読み直してください。</div></li>`;
+      }
+      return `<li class="dc-row"><div class="dc-head"><div class="dc-name"><b>${esc(m.label)}</b></div><div class="dc-qty">読取 <b>${m.qty}点</b></div></div>
+        <div class="dc-sub">まだ仮登録していません。数え終わっていれば仮登録してください。</div>
+        <button class="btn btn-primary uc-prov" data-unit="${esc(m.unit)}" data-label="${esc(m.label)}">仮登録（1回目完了）</button></li>`;
+    }).join("");
+  }
+  // 「確認待ち」タブから任意の単位を仮登録
+  async function markUnitProvisional(unit, label) {
+    if (!ensureEditable()) return;
+    unit = (unit || "").trim(); if (!unit) return;
+    const who = requireStaff(); if (!who) return;
+    const qty = unitQty(unit);
+    if (!confirm(`${label}（${qty}点）を仮登録します。よろしいですか？\n（この後は別の人がダブルチェックします）`)) return;
+    try {
+      await DB.setRackCheck(state.activeSessionId, unit, { status: "provisional", first_by: who, first_at: new Date().toISOString() });
+      haptic("ok"); toast(`${label}を仮登録しました`);
+      state.rackChecks = await DB.getRackChecks(state.activeSessionId);
+      renderCheckView(); renderCheckBadge();
+      if (state.view === "scan") renderScan();
+    } catch (e) { toast("仮登録に失敗: " + (e.message || e)); }
+  }
+
   function requireStaff() {
     const name = (DB.getDeviceName() || "").trim();
     if (!name) { toast("先に担当者名を入力してください"); const s = $("#staff-name"); if (s) s.focus(); return null; }
@@ -381,7 +430,7 @@
       haptic("ok"); toast(`${unitLabel(unit)} ダブルチェック完了（${who}）`);
       state.rackChecks = await DB.getRackChecks(state.activeSessionId);
       renderRackRow(); renderCheckBadge();
-      if (state.view === "check") renderDcList();
+      if (state.view === "check") renderCheckView();
       if (state.view === "scan") renderScan();
       return true;
     } catch (e) { toast("完了処理に失敗: " + (e.message || e)); return false; }
@@ -402,7 +451,7 @@
       state.rackChecks = await DB.getRackChecks(state.activeSessionId);
       toast(`${unitLabel(unit)}をリセットしました。もう一度読み込んでください。`);
       renderScan(); renderCheckBadge();
-      if (state.view === "check") renderDcList();
+      if (state.view === "check") renderCheckView();
     } catch (e) { toast("再確認に失敗: " + (e.message || e)); }
   }
 
@@ -755,13 +804,35 @@
   // レポートは「ダブルチェック完了」分のみ反映。
   // 単位＝店内はラック / バックヤード・その他倉庫はそのロケーション全体。
   // その単位がダブルチェック完了なら計上（店内でラック未設定は除外）。
-  function scanConfirmed(sc) {
-    const base = baseLocation(sc.location);
-    const unit = (base === "店内在庫") ? rackOf(sc.location) : base;
-    if (base === "店内在庫" && !unit) return false;
-    const c = state.allRackChecks[sc.session_id + "|" + unit];
-    return !!(c && c.status === "checked");
+  // 確認状態は「店舗×日付×単位」で照合する（セッションが分かれていても、
+  //   同じ店舗・日付で同じラックがダブルチェックされていれば確定扱いにする）。
+  //   ラック名は前後空白を無視して比較（表記ゆれ対策）。
+  const CKEY = "";
+  let _confirmCtx = null; // { status: {key: "checked"|"provisional"}, dmap }
+  function unitKeyParts(store, date, unit) { return store + CKEY + date + CKEY + String(unit || "").trim(); }
+  function buildConfirmCtx() {
+    const dmap = sessionDateMap();
+    const storeById = {};
+    state.sessions.forEach((s) => { storeById[s.id] = storeKey(s.store); });
+    const status = {};
+    Object.values(state.allRackChecks).forEach((c) => {
+      if (!c || (c.status !== "checked" && c.status !== "provisional")) return;
+      const unit = String(c.rack || "").trim();
+      if (!unit) return;
+      const key = unitKeyParts(storeById[c.session_id] || "（店舗未設定）", dmap[c.session_id] || "（日付不明）", unit);
+      if (c.status === "checked" || status[key] !== "checked") status[key] = c.status; // checked優先
+    });
+    return { status, dmap };
   }
+  function unitStatusOf(sc) {
+    if (!_confirmCtx) _confirmCtx = buildConfirmCtx();
+    const base = baseLocation(sc.location);
+    const unit = base === "店内在庫" ? rackOf(sc.location).trim() : base;
+    if (base === "店内在庫" && !unit) return "none";
+    const key = unitKeyParts(storeKey(sc.store), _confirmCtx.dmap[sc.session_id] || "（日付不明）", unit);
+    return _confirmCtx.status[key] || "none";
+  }
+  function scanConfirmed(sc) { return unitStatusOf(sc) === "checked"; }
   const sumQty = (arr) => arr.reduce((a, x) => a + x.qty, 0);
   const priceLabel = (it) => (it && it.price != null && it.price !== "" ? "¥" + jnum(Number(it.price)) : "不明");
   function catSumOf(scans) {
@@ -942,8 +1013,7 @@
       const base = baseLocation(sc.location);
       const unit = base === "店内在庫" ? rackOf(sc.location) : base;
       if (base === "店内在庫" && !unit) { orphanQty += sc.qty; return; }
-      const c = state.allRackChecks[sc.session_id + "|" + unit];
-      const status = c && c.status === "provisional" ? "仮登録" : "未確認";
+      const status = unitStatusOf(sc) === "provisional" ? "仮登録" : "未確認";
       const label = base === "店内在庫" ? "ラック " + unit : unitLabel(unit);
       const m = pendMap[base + "|" + unit] || (pendMap[base + "|" + unit] = { label, qty: 0, status });
       m.qty += sc.qty;
@@ -1320,12 +1390,8 @@
 
   // その読取の単位の確認状態ラベル
   function unitConfirmLabel(sc) {
-    const base = baseLocation(sc.location);
-    const unit = base === "店内在庫" ? rackOf(sc.location) : base;
-    if (base === "店内在庫" && !unit) return "未確認";
-    const c = state.allRackChecks[sc.session_id + "|" + unit];
-    if (!c) return "未確認";
-    return c.status === "checked" ? "確認済" : c.status === "provisional" ? "仮登録" : "未確認";
+    const s = unitStatusOf(sc);
+    return s === "checked" ? "確認済" : s === "provisional" ? "仮登録" : "未確認";
   }
   // 全明細CSV（ダブルチェック未完了も含む＝スキャン画面の総点数と一致する範囲）
   function exportAllScansCSV() {
@@ -1430,6 +1496,10 @@
       const li = btn.closest(".dc-row");
       const inp = li ? li.querySelector(".dc-checker") : null;
       markRackChecked(rack, inp ? inp.value : (dcDrafts[rack] || ""));
+    });
+    $("#unconfirmed-list").addEventListener("click", (e) => {
+      const prov = e.target.closest(".uc-prov");
+      if (prov) markUnitProvisional(prov.dataset.unit, prov.dataset.label);
     });
 
     $("#cam-open").addEventListener("click", openCam);
