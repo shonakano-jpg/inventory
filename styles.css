@@ -353,6 +353,7 @@ body.home-active .tabbar { display: none; }
 .rcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px; text-align: center; }
 .rcard .n { font-size: 22px; font-weight: 800; }
 .rcard .l { font-size: 11px; color: var(--muted); }
+.rcard .rcard-note { font-size: 9px; }
 .report-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .rtab { flex: 1; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .rtab.active { background: var(--primary); color: #fff; border-color: var(--primary-d); }

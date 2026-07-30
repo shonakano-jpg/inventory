@@ -857,6 +857,8 @@
   }
   function scanConfirmed(sc) { return unitStatusOf(sc) === "checked"; }
   const sumQty = (arr) => arr.reduce((a, x) => a + x.qty, 0);
+  // 小物（雑貨/小物など、カテゴリ名に「小物」を含む）は「着数」に含めず別集計する
+  const isKomono = (sc) => { const it = state.itemMap[sc.sku]; return !!(it && String(it.category || "").includes("小物")); };
   const priceLabel = (it) => (it && it.price != null && it.price !== "" ? "¥" + jnum(Number(it.price)) : "不明");
   function catSumOf(scans) {
     const m = {};
@@ -876,8 +878,8 @@
     state.allScans.forEach((sc) => {
       const store = storeKey(sc.store), date = scanDate(sc, dmap);
       const key = store + " " + date;
-      const g = (groups[key] = groups[key] || { store, date, qty: 0 });
-      if (scanConfirmed(sc)) g.qty += sc.qty;
+      const g = (groups[key] = groups[key] || { store, date, qty: 0, komono: 0 });
+      if (scanConfirmed(sc)) { if (isKomono(sc)) g.komono += sc.qty; else g.qty += sc.qty; }
     });
     let rows = Object.values(groups).sort((a, b) =>
       a.store.localeCompare(b.store, "ja") || b.date.localeCompare(a.date));
@@ -895,22 +897,24 @@
 
     if (filter) rows = rows.filter((r) => r.store === filter);
     const grand = rows.reduce((a, r) => a + r.qty, 0);
+    const grandKomono = rows.reduce((a, r) => a + r.komono, 0);
     if (!rows.length) {
       body.innerHTML = filterHtml +
         `<div class="empty">${filter ? "「" + esc(filter) + "」の棚卸しデータはありません。" : "まだ読み取りデータがありません。"}</div>`;
       return;
     }
     body.innerHTML = filterHtml +
-      `<div class="report-note">※ ダブルチェック完了分のみ集計しています。</div>
+      `<div class="report-note">※ ダブルチェック完了分のみ集計。着数は<b>小物を除く</b>数です。</div>
        <div class="report-cards">
          <div class="rcard"><div class="n">${jnum(grand)}</div><div class="l">${filter ? esc(filter) + " 確定着数" : "全体 確定着数"}</div></div>
+         <div class="rcard"><div class="n">${jnum(grandKomono)}</div><div class="l">小物（別集計）</div></div>
          <div class="rcard"><div class="n">${rows.length}</div><div class="l">${filter ? "棚卸し（日付）" : "店舗×日付"}</div></div>
        </div>
        <ul class="report-list">` +
       rows.map((g) => `
         <li class="row store-row" data-store="${esc(g.store)}" data-date="${esc(g.date)}">
           <div class="row-main"><div class="row-name">${esc(g.store)}</div>
-          <div class="row-sub">🗓 ${esc(g.date)}</div></div>
+          <div class="row-sub">🗓 ${esc(g.date)}　着数 ${jnum(g.qty)}${g.komono ? " ・ 小物 " + jnum(g.komono) : ""}</div></div>
           <span class="row-qty">${jnum(g.qty)}</span><span class="chev">›</span></li>`).join("") +
       `</ul>`;
   }
@@ -922,10 +926,14 @@
     const dmap = sessionDateMap();
     const groupAll = state.allScans.filter((sc) => storeKey(sc.store) === store && scanDate(sc, dmap) === date);
     const scans = groupAll.filter(scanConfirmed); // ダブルチェック完了分のみ
-    const inStore = scans.filter((sc) => baseLocation(sc.location) === "店内在庫");
-    const byyard = scans.filter((sc) => baseLocation(sc.location) === "バックヤード在庫");
-    const other = scans.filter((sc) => baseLocation(sc.location) === "その他倉庫");
-    const total = sumQty(scans);
+    const gScans = scans.filter((sc) => !isKomono(sc)); // 着数（衣類）
+    const kScans = scans.filter(isKomono);              // 小物（別集計）
+    const byBase = (arr, base) => arr.filter((sc) => baseLocation(sc.location) === base);
+    const inStore = byBase(gScans, "店内在庫");
+    const byyard = byBase(gScans, "バックヤード在庫");
+    const other = byBase(gScans, "その他倉庫");
+    const total = sumQty(gScans);
+    const komonoTotal = sumQty(kScans);
 
     // 本確定（変更不可）状態
     const groupSessions = reportGroupSessions();
@@ -948,18 +956,29 @@
       return;
     }
 
-    // ①-1 サマリーカード
+    // ①-1 サマリーカード（合計着数は小物を除く）
     const cards =
       `<div class="report-cards report-cards-4">
-         <div class="rcard rcard-total"><div class="n">${jnum(total)}</div><div class="l">合計着数</div></div>
+         <div class="rcard rcard-total"><div class="n">${jnum(total)}</div><div class="l">合計着数<br><span class="rcard-note">（小物除く）</span></div></div>
          <div class="rcard"><div class="n">${jnum(sumQty(inStore))}</div><div class="l">店内</div></div>
          <div class="rcard"><div class="n">${jnum(sumQty(byyard))}</div><div class="l">バックヤード</div></div>
          <div class="rcard"><div class="n">${jnum(sumQty(other))}</div><div class="l">その他倉庫</div></div>
        </div>`;
 
-    // ①-5 カテゴリ×価格帯 ランキング上位5
+    // 小物（着数とは別集計）
+    const komonoHtml =
+      `<h3 class="chart-title">小物（着数とは別集計）</h3>
+       <div class="report-cards report-cards-4">
+         <div class="rcard rcard-total"><div class="n">${jnum(komonoTotal)}</div><div class="l">小物 合計</div></div>
+         <div class="rcard"><div class="n">${jnum(sumQty(byBase(kScans, "店内在庫")))}</div><div class="l">店内</div></div>
+         <div class="rcard"><div class="n">${jnum(sumQty(byBase(kScans, "バックヤード在庫")))}</div><div class="l">バックヤード</div></div>
+         <div class="rcard"><div class="n">${jnum(sumQty(byBase(kScans, "その他倉庫")))}</div><div class="l">その他倉庫</div></div>
+       </div>
+       ${komonoTotal ? `<h4 class="chart-sub">小物の価格帯比率</h4>${barChart(priceSumOf(kScans), komonoTotal, "price")}` : ""}`;
+
+    // ①-5 カテゴリ×価格帯 ランキング上位5（衣類のみ）
     const cpMap = {};
-    scans.forEach((sc) => {
+    gScans.forEach((sc) => {
       const it = state.itemMap[sc.sku];
       const cat = it ? (it.category || "未分類") : "マスタ外";
       const key = cat + " / " + priceLabel(it);
@@ -971,11 +990,11 @@
           `<li class="rank-item"><span class="rank-label">${esc(label)}</span><span class="rank-qty">${jnum(qty)}点</span></li>`).join("") + `</ol>`
       : `<div class="empty">データなし</div>`;
 
-    // ② カテゴリごとの価格帯比率
-    const catTotals = catSumOf(scans);
+    // ② カテゴリごとの価格帯比率（衣類のみ。小物は上の別集計）
+    const catTotals = catSumOf(gScans);
     const catsOrdered = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).map(([c]) => c);
     const perCatHtml = catsOrdered.map((cat) => {
-      const catScans = scans.filter((sc) => { const it = state.itemMap[sc.sku]; const c = it ? (it.category || "未分類") : "マスタ外"; return c === cat; });
+      const catScans = gScans.filter((sc) => { const it = state.itemMap[sc.sku]; const c = it ? (it.category || "未分類") : "マスタ外"; return c === cat; });
       return `<h4 class="cat-title">${esc(cat)}（${jnum(catTotals[cat])}点）</h4>${barChart(priceSumOf(catScans), catTotals[cat], "price")}`;
     }).join("");
 
@@ -1026,9 +1045,10 @@
       : `<div class="empty">マスタ外の商品はありません（すべてマスタに登録済み）。</div>`;
     const unknownPriceTotal = sumQty(scans.filter((sc) => { const it = state.itemMap[sc.sku]; return it && (it.price == null || it.price === ""); }));
 
-    // ⑤ 未反映（レポート外）の内訳＝全読取 − 確定。差がある理由を見える化。
+    // ⑤ 未反映（レポート外）の内訳＝全読取 − 確定（小物含む）。差がある理由を見える化。
     const allTotal = sumQty(groupAll);
-    const gap = allTotal - total;
+    const confirmedTotal = sumQty(scans); // 着数＋小物の確定合計
+    const gap = allTotal - confirmedTotal;
     let orphanQty = 0;           // 店内でラック名なし（確定不可）
     const pendMap = {};          // 未確認/仮登録の場所ごと
     groupAll.forEach((sc) => {
@@ -1045,7 +1065,7 @@
     let gapHtml = "";
     if (gap > 0) {
       gapHtml = `<h3 class="chart-title">⑤ 未反映（レポートに出ていない ${jnum(gap)}点）</h3>
-        <div class="report-note">全読取 ${jnum(allTotal)} − 確定 ${jnum(total)} = <b>${jnum(gap)}点</b>。下記を解消すると確定に反映されます。</div>
+        <div class="report-note">全読取 ${jnum(allTotal)} − 確定 ${jnum(confirmedTotal)}（着数${jnum(total)}＋小物${jnum(komonoTotal)}） = <b>${jnum(gap)}点</b>。下記を解消すると確定に反映されます。</div>
         <ul class="unit-list">` +
         (orphanQty > 0
           ? `<li class="unit-item unit-missing"><div class="unit-top"><span class="unit-name">⚠️ 店内でラック名なし</span><span class="unit-qty">${jnum(orphanQty)}点</span></div><div class="unit-who">ラックが無いと確定できません。「全明細CSV」で<b>場所=店内在庫・ラック空</b>の行を確認し、正しいラックで読み直してください。</div></li>`
@@ -1057,16 +1077,17 @@
 
     body.innerHTML = subHtml +
       `<div class="report-note">※ ダブルチェック完了分のみ集計（店内はラックのダブルチェック完了が対象。BY/その他は全数）。</div>
-       <h3 class="chart-title">① サマリー</h3>
+       <h3 class="chart-title">① サマリー（着数＝小物を除く）</h3>
        ${cards}
        <h4 class="chart-sub">全体のカテゴリ比率</h4>
-       ${barChart(catSumOf(scans), total, "cat")}
+       ${barChart(catSumOf(gScans), total, "cat")}
        <h4 class="chart-sub">店内のカテゴリ比率</h4>
        ${barChart(catSumOf(inStore), sumQty(inStore), "cat")}
        <h4 class="chart-sub">店内の価格帯比率</h4>
        ${barChart(priceSumOf(inStore), sumQty(inStore), "price")}
        <h4 class="chart-sub">カテゴリ×価格帯 ランキング（上位5）</h4>
        ${rankingHtml}
+       ${komonoHtml}
        <h3 class="chart-title">② カテゴリごとの価格帯比率</h3>
        ${perCatHtml}
        <h3 class="chart-title">③ 確認済みの一覧（抜け漏れチェック）</h3>
