@@ -432,7 +432,7 @@
     if (locked) { badge.hidden = false; badge.textContent = "🔒 本確定"; badge.className = "session-status st-final"; }
     else { badge.hidden = true; }
     $("#locked-banner").hidden = !locked;
-    [["#cam-open", locked || offline], ["#manual-open", locked || offline], ["#recent-reset", locked]]
+    [["#cam-open", locked || offline], ["#manual-open", locked || offline]]
       .forEach(([sel, dis]) => { const el = $(sel); if (el) el.disabled = !!dis; });
 
     const totalQty = state.scans.reduce((a, s) => a + s.qty, 0);
@@ -561,18 +561,6 @@
   }
 
   /* ---------- 確定ワークフロー ---------- */
-  async function resetRecent() {
-    const s = activeSession(); if (!s) { toast("セッションがありません"); return; }
-    if (!ensureEditable()) return;
-    if (!state.scans.length) { toast("読取データがありません"); return; }
-    if (!confirm("この棚卸しの読取をすべて消去してリセットしますか？（元に戻せません）")) return;
-    try {
-      await DB.clearScans(s.id);
-      state.scans = await DB.getScans(s.id);
-      renderScan(); toast("読取をリセットしました");
-    } catch (e) { toast("リセットに失敗: " + (e.message || e)); }
-  }
-
   async function finalizeStore() {
     if (!state.reportKey) return;
     const { store, date } = state.reportKey;
@@ -1258,7 +1246,6 @@
         const d = $("#device-name"); if (d) d.value = e.target.value;
       });
     }
-    $("#recent-reset").addEventListener("click", resetRecent);
 
     $$(".loc-btn").forEach((b) => b.addEventListener("click", () => {
       state.location = b.dataset.loc; localStorage.setItem(LS_LOC, state.location);
