@@ -841,24 +841,41 @@
       return `<h4 class="cat-title">${esc(cat)}（${jnum(catTotals[cat])}点）</h4>${barChart(priceSumOf(catScans), catTotals[cat], "price")}`;
     }).join("");
 
-    // ③ 確認済みの単位一覧（抜け漏れチェック）
-    // 店内=ラック別、BY/その他=まとめて。ダブルチェック完了（＝集計対象）の単位を列挙。
-    const rackSums = {}; // rack -> qty
-    inStore.forEach((sc) => { const r = rackOf(sc.location) || "（ラック名なし）"; rackSums[r] = (rackSums[r] || 0) + sc.qty; });
-    const rackRows = Object.entries(rackSums).sort((a, b) => a[0].localeCompare(b[0], "ja", { numeric: true }));
-    const rackListHtml = rackRows.length
-      ? `<ul class="unit-list">` + rackRows.map(([r, q]) =>
-          `<li class="unit-item"><span class="unit-name">✅ ラック ${esc(r)}</span><span class="unit-qty">${jnum(q)}点</span></li>`).join("") + `</ul>`
+    // ③ 確認済みの単位一覧（抜け漏れチェック＋登録者・ダブルチェック者）
+    // 店内=ラック別、BY/その他=まとめて。単位ごとに qty と確認記録（登録者/確認者）をまとめる。
+    const unitAgg = {}; // unit -> { base, qty, check }
+    scans.forEach((sc) => {
+      const base = baseLocation(sc.location);
+      const unit = base === "店内在庫" ? (rackOf(sc.location) || "（ラック名なし）") : base;
+      const m = unitAgg[unit] || (unitAgg[unit] = { base, qty: 0, check: null });
+      m.qty += sc.qty;
+      if (!m.check) m.check = state.allRackChecks[sc.session_id + "|" + unit] || null;
+    });
+    // 登録者・確認者の表示（記録が無ければ「—」）
+    const whoLine = (check) => {
+      const reg = (check && check.first_by) ? esc(check.first_by) : "—";
+      const chk = (check && check.checked_by) ? esc(check.checked_by) : "—";
+      return `<div class="unit-who">登録: <b>${reg}</b>　ダブルチェック: <b>${chk}</b></div>`;
+    };
+    const rackUnits = Object.entries(unitAgg).filter(([, m]) => m.base === "店内在庫")
+      .sort((a, b) => a[0].localeCompare(b[0], "ja", { numeric: true }));
+    const rackListHtml = rackUnits.length
+      ? `<ul class="unit-list">` + rackUnits.map(([r, m]) =>
+          `<li class="unit-item"><div class="unit-top"><span class="unit-name">✅ ラック ${esc(r)}</span><span class="unit-qty">${jnum(m.qty)}点</span></div>${whoLine(m.check)}</li>`).join("") + `</ul>`
       : `<div class="empty">確認済みのラックがありません。</div>`;
-    const locRow = (label, qty, has) =>
-      `<li class="unit-item ${has ? "" : "unit-missing"}"><span class="unit-name">${has ? "✅" : "⚠️"} ${esc(label)}</span><span class="unit-qty">${has ? jnum(qty) + "点" : "未確認"}</span></li>`;
+    const locRow = (label, locName) => {
+      const m = unitAgg[locName];
+      const has = !!m;
+      if (!has) return `<li class="unit-item unit-missing"><div class="unit-top"><span class="unit-name">⚠️ ${esc(label)}</span><span class="unit-qty">未確認</span></div></li>`;
+      return `<li class="unit-item"><div class="unit-top"><span class="unit-name">✅ ${esc(label)}</span><span class="unit-qty">${jnum(m.qty)}点</span></div>${whoLine(m.check)}</li>`;
+    };
     const unitsHtml =
-      `<h4 class="chart-sub">店内（確認済みラック ${rackRows.length}本）</h4>
+      `<h4 class="chart-sub">店内（確認済みラック ${rackUnits.length}本）</h4>
        ${rackListHtml}
        <h4 class="chart-sub">バックヤード・その他倉庫</h4>
        <ul class="unit-list">
-         ${locRow("バックヤード", sumQty(byyard), byyard.length > 0)}
-         ${locRow("その他倉庫", sumQty(other), other.length > 0)}
+         ${locRow("バックヤード", "バックヤード在庫")}
+         ${locRow("その他倉庫", "その他倉庫")}
        </ul>`;
 
     body.innerHTML = subHtml +
@@ -1197,14 +1214,17 @@
     } else if (state.reportStore) {
       scans = scans.filter((sc) => storeKey(sc.store) === state.reportStore);
     }
-    const rows = [["店舗", "棚卸日", "ロケーション", "ラック", "コード", "商品名", "カテゴリ", "単価", "数量"]];
+    const rows = [["店舗", "棚卸日", "ロケーション", "ラック", "コード", "商品名", "カテゴリ", "単価", "数量", "登録者", "ダブルチェック者"]];
     const sorted = [...scans].sort((a, b) =>
       storeKey(a.store).localeCompare(storeKey(b.store), "ja") ||
       scanDate(a, dmap).localeCompare(scanDate(b, dmap)) ||
       (a.location || "").localeCompare(b.location || "") || (b.qty - a.qty));
     sorted.forEach((sc) => {
       const it = state.itemMap[sc.sku] || {};
-      rows.push([storeKey(sc.store), scanDate(sc, dmap), baseLocation(sc.location), rackOf(sc.location), sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty]);
+      const base = baseLocation(sc.location);
+      const unit = base === "店内在庫" ? rackOf(sc.location) : base;
+      const chk = state.allRackChecks[sc.session_id + "|" + unit] || {};
+      rows.push([storeKey(sc.store), scanDate(sc, dmap), base, rackOf(sc.location), sc.sku, it.name || "", it.category || "", it.price ?? "", sc.qty, chk.first_by || "", chk.checked_by || ""]);
     });
     const safe = (state.reportKey ? state.reportKey.store + "_" + state.reportKey.date : (state.reportStore || "全体")).replace(/[^\w\-一-龠ぁ-んァ-ヶー]/g, "_");
     download("tanaoroshi_" + safe + ".csv", toCSV(rows));
