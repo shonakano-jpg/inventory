@@ -22,6 +22,9 @@ create table if not exists public.stores (
   created_at timestamptz not null default now()
 );
 
+-- 店舗ごとの登録ラック一覧（カウント漏れ防止用）。改行/カンマ区切り・範囲(A1-A20)可。
+alter table public.stores add column if not exists racks text not null default '';
+
 -- 棚卸しセッション（どの店舗の棚卸しか）
 create table if not exists public.sessions (
   id         uuid primary key default gen_random_uuid(),

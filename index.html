@@ -7,7 +7,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<link rel="stylesheet" href="styles.css?v=59" />
+<link rel="stylesheet" href="styles.css?v=60" />
 
 <header class="topbar">
   <div class="topbar-title">古着棚卸し</div>
@@ -93,6 +93,7 @@
       <input id="rack-input" class="rack-input" list="rack-datalist" placeholder="棚卸し中のラック（例：A-1 / レジ横）" autocomplete="off" />
       <datalist id="rack-datalist"></datalist>
     </div>
+    <div id="rack-chips" class="rack-chips" hidden></div>
     <div id="rack-status" class="rack-status" hidden></div>
 
     <div class="input-buttons">
@@ -118,6 +119,8 @@
   <section id="view-check" class="view">
     <h2 class="view-title">確認待ち</h2>
     <div id="check-sub" class="muted" style="margin-bottom:8px"></div>
+    <h3 class="dc-h">登録ラックの進捗（漏れチェック）</h3>
+    <div id="rack-progress"></div>
     <h3 class="dc-h">① まだ仮登録していない場所（未確認）</h3>
     <ul id="unconfirmed-list" class="dc-list"></ul>
     <h3 class="dc-h">② 仮登録待ち（別の人がダブルチェック）</h3>
@@ -196,7 +199,11 @@
 
     <div class="setting-group">
       <h3>店舗マスタ</h3>
-      <p class="muted">棚卸しセッション作成時に選べる店舗。追加・削除できます。</p>
+      <p class="muted">棚卸しセッション作成時に選べる店舗。追加・削除できます。各店舗の「🧱 ラック」で<b>ラックを登録</b>すると、スキャン画面で選べるようになり、確認待ちタブで<b>カウント漏れチェック</b>が出ます。</p>
+      <details class="cloud-help"><summary>ラック登録が保存できない時（管理者・SQL 1回）</summary>
+        <p class="muted">クラウドに <code>racks</code> 列が無い場合は、Supabase の SQL Editor で次を1回実行してください：</p>
+        <pre class="sqlbox">alter table public.stores add column if not exists racks text not null default '';</pre>
+      </details>
       <div class="store-add">
         <input id="store-name" placeholder="店舗名（例：NOTIME 下北沢店）" />
         <div class="modal-row">
@@ -361,9 +368,22 @@
   </div>
 </div>
 
+<div id="racks-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h3 id="racks-modal-title">ラックを登録</h3>
+    <p class="muted" style="font-size:13px">この店舗のラック名を登録します。<b>1行に1つ</b>、または<b>カンマ区切り</b>。<b>範囲は「A1-A20」</b>のように書くと自動で連番展開します（例：<code>V1-V6, W1-W6, レジ横</code>）。</p>
+    <textarea id="racks-text" rows="8" style="width:100%" placeholder="例：&#10;A1-A20&#10;B1-B10&#10;レジ横"></textarea>
+    <div id="racks-preview" class="muted" style="font-size:12px;margin:6px 0"></div>
+    <div class="btn-row">
+      <button id="racks-save" class="btn btn-primary">保存</button>
+      <button id="racks-cancel" class="btn btn-ghost">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
-<script src="config.js?v=59"></script>
-<script src="db.js?v=59"></script>
-<script src="scanner.js?v=59"></script>
-<script src="app.js?v=59"></script>
+<script src="config.js?v=60"></script>
+<script src="db.js?v=60"></script>
+<script src="scanner.js?v=60"></script>
+<script src="app.js?v=60"></script>
