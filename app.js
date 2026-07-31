@@ -375,7 +375,7 @@
     }
   }
 
-  /* ---------- 仮登録待ち（別画面でダブルチェック） ---------- */
+  /* ---------- ダブルチェック待ち（仮登録済みを別の人が確認） ---------- */
   let dcDrafts = {}; // rack -> 確認者名の入力中テキスト
   const provisionalRacks = () => Object.entries(state.rackChecks || {})
     .filter(([, c]) => c && c.status === "provisional")
@@ -387,7 +387,7 @@
     // 名前を入力中は再描画しない（入力が消えないように）
     if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("dc-checker")) return;
     const rows = provisionalRacks();
-    if (!rows.length) { ul.innerHTML = `<li class="empty">仮登録待ちはありません。</li>`; return; }
+    if (!rows.length) { ul.innerHTML = `<li class="empty">ダブルチェック待ちはありません。</li>`; return; }
     ul.innerHTML = rows.map(({ rack, c }) => {
       const qty = unitQty(rack);
       return `<li class="dc-row" data-rack="${esc(rack)}">
