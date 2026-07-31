@@ -61,6 +61,19 @@ select { appearance: none; }
 
 /* ラック選択（店内のみ） */
 .rack-row { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.rack-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; max-height: 156px; overflow-y: auto; }
+.rack-chips.show { max-height: none; }
+.rack-chip { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 6px 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); white-space: nowrap; }
+.rack-chip.st-none { color: var(--muted); }
+.rack-chip.st-read { border-color: #6a5320; color: #f4c66a; }
+.rack-chip.st-provisional { border-color: #6a5320; color: #f4c66a; background:#241d10; }
+.rack-chip.st-checked { border-color: #1f5a37; color: #7ee2a8; background:#10331f; }
+.rack-chip.sel { outline: 2px solid var(--primary, #3b82f6); }
+.rack-prog-sum { font-size: 13px; margin: 0 0 6px; }
+.rack-prog-sum b { color: var(--text); }
+.cloud-help { margin: 6px 0; }
+.cloud-help summary { font-size: 13px; color: #7cc0ff; cursor: pointer; }
+.sqlbox { background: #0c1119; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; overflow-x: auto; white-space: pre; }
 .rack-label {
   font-size: 13px; font-weight: 700; color: #7cc0ff; white-space: nowrap;
   background: #10283f; border: 1px solid #244a6e; border-radius: 8px; padding: 8px 10px;

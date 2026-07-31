@@ -27,6 +27,29 @@
     if (state.location === RACK_BASE && state.rack.trim()) return RACK_BASE + RACK_SEP + state.rack.trim();
     return state.location;
   }
+  // 登録ラックのテキスト（改行/カンマ区切り・範囲A1-A20対応）を展開して一覧化
+  function expandRackTokens(text) {
+    const out = [], seen = new Set();
+    String(text || "").split(/[\n,、，]/).forEach((raw) => {
+      const t = raw.trim(); if (!t) return;
+      const m = t.match(/^(.*?)(\d+)\s*[-〜~－ｰ]\s*(\d+)$/);
+      if (m) {
+        const pre = m[1], a = m[2], b = m[3];
+        const s = parseInt(a, 10), e = parseInt(b, 10), pad = a.length;
+        if (!isNaN(s) && !isNaN(e) && e >= s && e - s <= 999) {
+          for (let i = s; i <= e; i++) { const nm = pre + String(i).padStart(pad, "0"); if (!seen.has(nm)) { seen.add(nm); out.push(nm); } }
+          return;
+        }
+      }
+      if (!seen.has(t)) { seen.add(t); out.push(t); }
+    });
+    return out;
+  }
+  const racksForStore = (storeName) => {
+    const st = (state.stores || []).find((x) => x.name === storeName);
+    return st ? expandRackTokens(st.racks || "") : [];
+  };
+  const currentStoreRacks = () => { const s = activeSession(); return s ? racksForStore(s.store) : []; };
   const LS_ACTIVE = "fi_active_session";
   const LS_LOC = "fi_location";
   const LS_RACK = "fi_rack";
@@ -235,8 +258,26 @@
       if (state.rackTableMissing) sub.textContent = "クラウド側の準備が必要です（設定→SQLを1回実行）。";
       else sub.textContent = s ? `${s.store || "（店舗未設定）"} / ${s.name}` : "棚卸しを選んでください。";
     }
+    renderRackProgress();
     renderUnconfirmedList();
     renderDcList();
+  }
+
+  // 登録ラックの進捗（漏れチェック）
+  function renderRackProgress() {
+    const box = $("#rack-progress"); if (!box) return;
+    const regs = currentStoreRacks();
+    if (!regs.length) { box.innerHTML = `<div class="muted" style="font-size:13px">この店舗はラック未登録です。設定→店舗マスタ→「🧱 ラック」で登録すると、ここに漏れチェックが出ます。</div>`; return; }
+    const counts = { checked: 0, provisional: 0, read: 0, none: 0 };
+    const chips = regs.map((r) => {
+      const st = rackStatusOf(r); counts[st]++;
+      const icon = st === "checked" ? "✅" : st === "provisional" ? "🕒" : st === "read" ? "🔶" : "⬜";
+      return `<span class="rack-chip st-${st}">${icon} ${esc(r)}</span>`;
+    }).join("");
+    const done = counts.checked, remain = regs.length - done;
+    box.innerHTML =
+      `<div class="rack-prog-sum">確認済 <b>${done}</b> / 登録 <b>${regs.length}</b>本${remain ? `　残り ${remain}（⬜未読取 ${counts.none}・🔶読取のみ ${counts.read}・🕒仮登録 ${counts.provisional}）` : "　🎉 全ラック確認済み"}</div>
+       <div class="rack-chips show">${chips}</div>`;
   }
 
   /* === スキャン === */
@@ -265,16 +306,38 @@
       const input = $("#rack-input");
       if (document.activeElement !== input) input.value = state.rack;
       $("#rack-datalist").innerHTML = rackNames().map((r) => `<option value="${esc(r)}"></option>`).join("");
-    }
+      renderRackChips();
+    } else { const box = $("#rack-chips"); if (box) { box.hidden = true; box.innerHTML = ""; } }
     renderRackStatus();
   }
 
-  // このセッションで登場した店内ラック名（読取済み＋ステータス登録済み）
+  // このセッションで登場した店内ラック名（登録ラック＋読取済み＋ステータス登録済み）
   function rackNames() {
-    const set = new Set();
+    const set = new Set(currentStoreRacks());
     state.scans.forEach((sc) => { if (baseLocation(sc.location) === RACK_BASE) { const r = rackOf(sc.location); if (r) set.add(r); } });
     Object.keys(state.rackChecks || {}).forEach((r) => { if (!isLocUnit(r)) set.add(r); });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ja", { numeric: true }));
+  }
+  // ラックの状態（このセッション）: checked / provisional / read（読取のみ）/ none（未読取）
+  function rackStatusOf(rack) {
+    const c = state.rackChecks[rack];
+    if (c && c.status === "checked") return "checked";
+    if (c && c.status === "provisional") return "provisional";
+    const has = state.scans.some((sc) => baseLocation(sc.location) === RACK_BASE && rackOf(sc.location) === rack);
+    return has ? "read" : "none";
+  }
+  // 登録ラックをチップ表示（状態色つき・タップで選択）
+  function renderRackChips() {
+    const box = $("#rack-chips"); if (!box) return;
+    const regs = currentStoreRacks();
+    if (!regs.length) { box.hidden = true; box.innerHTML = ""; return; }
+    box.hidden = false;
+    const cur = (state.rack || "").trim();
+    box.innerHTML = regs.map((r) => {
+      const st = rackStatusOf(r);
+      const icon = st === "checked" ? "✅" : st === "provisional" ? "🕒" : st === "read" ? "🔶" : "⬜";
+      return `<button class="rack-chip st-${st}${r === cur ? " sel" : ""}" data-rack="${esc(r)}">${icon} ${esc(r)}</button>`;
+    }).join("");
   }
 
   const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -1206,12 +1269,44 @@
     let html = "", lastBrand = null;
     state.stores.forEach((s) => {
       if (s.brand !== lastBrand) { html += `<li class="store-group-h">${esc(s.brand || "その他")}</li>`; lastBrand = s.brand; }
+      const rc = expandRackTokens(s.racks || "").length;
       html += `<li class="store-item">
         <div class="st-main"><div class="st-name">${esc(s.name)}</div>${s.area ? `<div class="st-sub">${esc(s.area)}</div>` : ""}</div>
         ${s.brand ? `<span class="st-brand">${esc(s.brand)}</span>` : ""}
+        <button class="store-racks btn btn-ghost sm" data-racks="${esc(s.name)}">🧱 ラック${rc ? "(" + rc + ")" : ""}</button>
         <button class="store-del" data-delstore="${esc(s.name)}" title="削除">×</button></li>`;
     });
     ul.innerHTML = html;
+  }
+  // 店舗ごとのラック登録モーダル
+  let racksEditStore = "";
+  function openRacksModal(name) {
+    racksEditStore = name;
+    const st = state.stores.find((x) => x.name === name);
+    $("#racks-modal-title").textContent = `ラックを登録：${name}`;
+    $("#racks-text").value = st ? (st.racks || "") : "";
+    updateRacksPreview();
+    $("#racks-modal").hidden = false;
+  }
+  function updateRacksPreview() {
+    const list = expandRackTokens($("#racks-text").value);
+    const el = $("#racks-preview");
+    el.innerHTML = list.length
+      ? `展開結果：<b>${list.length}本</b> ／ ${list.slice(0, 30).map(esc).join("・")}${list.length > 30 ? " …" : ""}`
+      : "（まだありません）";
+  }
+  async function saveRacksModal() {
+    if (!racksEditStore) return;
+    try {
+      await DB.setStoreRacks(racksEditStore, $("#racks-text").value);
+      state.stores = await DB.getStores();
+      $("#racks-modal").hidden = true;
+      renderStoreList();
+      if (state.view === "scan") renderRackRow();
+      toast(`「${racksEditStore}」のラックを保存しました`);
+    } catch (e) {
+      toast("保存に失敗: " + (e.message || e) + "（クラウドに racks 列の追加が必要な場合は設定のSQLを実行）");
+    }
   }
   async function seedStoresIfEmpty() {
     try {
@@ -1581,9 +1676,16 @@
     if (rackInput) {
       rackInput.value = state.rack;
       const saveRack = (e) => { state.rack = e.target.value; localStorage.setItem(LS_RACK, state.rack); };
-      rackInput.addEventListener("input", (e) => { saveRack(e); renderRackStatus(); });
+      rackInput.addEventListener("input", (e) => { saveRack(e); renderRackStatus(); renderRackChips(); });
       rackInput.addEventListener("change", (e) => { saveRack(e); renderRackRow(); });
     }
+    // 登録ラックのチップをタップで選択
+    $("#rack-chips").addEventListener("click", (e) => {
+      const chip = e.target.closest(".rack-chip"); if (!chip) return;
+      state.rack = chip.dataset.rack; localStorage.setItem(LS_RACK, state.rack);
+      const ri = $("#rack-input"); if (ri) ri.value = state.rack;
+      renderRackRow();
+    });
 
     // ラック確認ステータスの操作（仮登録／取消）
     $("#rack-status").addEventListener("click", (e) => {
@@ -1736,10 +1838,16 @@
     });
     $("#store-load-official").addEventListener("click", loadOfficialStores);
     $("#store-list-ui").addEventListener("click", async (e) => {
+      const rk = e.target.closest("[data-racks]");
+      if (rk) { openRacksModal(rk.dataset.racks); return; }
       const b = e.target.closest("[data-delstore]"); if (!b) return;
       const name = b.dataset.delstore;
       if (confirm(`店舗「${name}」を削除しますか？`)) { await DB.deleteStore(name); await reload(); }
     });
+    $("#racks-cancel").addEventListener("click", () => { $("#racks-modal").hidden = true; });
+    $("#racks-modal").addEventListener("click", (e) => { if (e.target.id === "racks-modal") $("#racks-modal").hidden = true; });
+    $("#racks-text").addEventListener("input", updateRacksPreview);
+    $("#racks-save").addEventListener("click", saveRacksModal);
     $("#sb-save-btn").addEventListener("click", async () => {
       const btn = $("#sb-save-btn"); btn.disabled = true; btn.textContent = "接続中…";
       try {

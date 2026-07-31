@@ -144,8 +144,15 @@
     async upsertStore(s) {
       const arr = readJSON(LS.stores, []);
       const i = arr.findIndex((x) => x.name === s.name);
-      const rec = { name: s.name, brand: s.brand || "", area: s.area || "" };
+      const rec = { name: s.name, brand: s.brand || "", area: s.area || "", racks: (i > -1 ? arr[i].racks : "") || "" };
       if (i > -1) arr[i] = rec; else arr.push(rec);
+      writeJSON(LS.stores, arr); emit();
+    },
+    async setStoreRacks(name, racks) {
+      const arr = readJSON(LS.stores, []);
+      const i = arr.findIndex((x) => x.name === name);
+      if (i > -1) arr[i] = { ...arr[i], racks: racks || "" };
+      else arr.push({ name, brand: "", area: "", racks: racks || "" });
       writeJSON(LS.stores, arr); emit();
     },
     async deleteStore(name) { writeJSON(LS.stores, readJSON(LS.stores, []).filter((x) => x.name !== name)); emit(); },
@@ -289,6 +296,10 @@
       const { error } = await sb.from("stores").upsert({ name: s.name, brand: s.brand || "", area: s.area || "" }, { onConflict: "name" });
       if (error) throw error;
     },
+    async setStoreRacks(name, racks) {
+      const { error } = await sb.from("stores").upsert({ name, racks: racks || "" }, { onConflict: "name" });
+      if (error) throw error;
+    },
     async deleteStore(name) { const { error } = await sb.from("stores").delete().eq("name", name); if (error) throw error; },
     async bulkUpsertStores(list) {
       const rows = list.filter((s) => s.name).map((s) => ({ name: s.name, brand: s.brand || "", area: s.area || "" }));
@@ -394,6 +405,7 @@
     // 店舗マスタ
     getStores() { return this.impl.getStores(); },
     upsertStore(s) { return this.impl.upsertStore(s); },
+    setStoreRacks(name, racks) { return this.impl.setStoreRacks(name, racks); },
     deleteStore(name) { return this.impl.deleteStore(name); },
     bulkUpsertStores(list) { return this.impl.bulkUpsertStores(list); },
   };
