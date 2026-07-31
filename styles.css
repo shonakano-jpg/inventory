@@ -14,6 +14,7 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; } /* class側のdisplay指定に負けて表示されるのを防ぐ */
 html, body {
   margin: 0; background: var(--bg); color: var(--text);
   font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, system-ui, sans-serif;
