@@ -1203,16 +1203,20 @@
         `</ul>`;
     }
 
+    // ロケーション別のカテゴリ比率（着数＝小物除く）。データがある時だけ表示。
+    const locCatHtml = (label, arr) => { const t = sumQty(arr); return t ? `<h4 class="chart-sub">${label}のカテゴリ比率（${jnum(t)}点）</h4>${barChart(catSumOf(arr), t, "cat")}` : ""; };
+
     body.innerHTML = subHtml +
       `<div class="report-note">※ ダブルチェック完了分のみ集計（店内はラックのダブルチェック完了が対象。BY/その他は全数）。</div>
        <h3 class="chart-title">① サマリー（着数＝小物を除く）</h3>
        ${cards}
        <h4 class="chart-sub">全体のカテゴリ比率</h4>
        ${barChart(catSumOf(gScans), total, "cat")}
-       <h4 class="chart-sub">店内のカテゴリ比率</h4>
-       ${barChart(catSumOf(inStore), sumQty(inStore), "cat")}
+       ${locCatHtml("店内", inStore)}
        <h4 class="chart-sub">店内の価格帯比率</h4>
        ${barChart(priceSumOf(inStore), sumQty(inStore), "price")}
+       ${locCatHtml("バックヤード", byyard)}
+       ${locCatHtml("その他倉庫", other)}
        <h4 class="chart-sub">カテゴリ×価格帯 ランキング（上位5）</h4>
        ${rankingHtml}
        ${komonoHtml}
